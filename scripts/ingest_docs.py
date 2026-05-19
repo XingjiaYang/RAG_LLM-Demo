@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import sys
 
@@ -10,8 +11,16 @@ from app.vector_store import VectorStore
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Ingest Markdown documents into Qdrant.")
+    parser.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Delete and recreate the collection before ingesting documents.",
+    )
+    args = parser.parse_args()
+
     store = VectorStore(settings)
-    inserted = store.ingest_markdown_dir()
+    inserted = store.ingest_markdown_dir(recreate=args.recreate)
     if inserted == 0:
         print(f"No markdown documents found in {settings.docs_dir}")
         return

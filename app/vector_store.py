@@ -78,9 +78,13 @@ class VectorStore:
                 ),
             )
 
-    def ingest_markdown_dir(self, docs_dir: Path | None = None) -> int:
+    def ingest_markdown_dir(
+        self,
+        docs_dir: Path | None = None,
+        recreate: bool = False,
+    ) -> int:
         docs_path = docs_dir or self.config.docs_dir
-        self.ensure_collection()
+        self.ensure_collection(recreate=recreate)
 
         points: list[PointStruct] = []
         for file_path in sorted(docs_path.glob("*.md")):

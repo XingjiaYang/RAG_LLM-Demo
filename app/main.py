@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.config import settings
+from app.llm_client import LocalLLMClient
 from app.rag import RAGPipeline
 from app.vector_store import SearchResult, VectorStore
 
@@ -323,7 +324,8 @@ INDEX_HTML = """
       try {
         const response = await fetch("/health");
         const data = await response.json();
-        setStatus(data.qdrant ? "Ready" : "Degraded", data.qdrant ? "ok" : "bad");
+        const ready = Boolean(data.qdrant && data.llm);
+        setStatus(ready ? "Ready" : "Degraded", ready ? "ok" : "bad");
       } catch {
         setStatus("Offline", "bad");
       }
@@ -438,7 +440,12 @@ class RAGResponse(BaseModel):
 
 
 vector_store = VectorStore(settings)
-rag_pipeline = RAGPipeline(settings, vector_store=vector_store)
+llm_client = LocalLLMClient(settings)
+rag_pipeline = RAGPipeline(
+    settings,
+    vector_store=vector_store,
+    llm_client=llm_client,
+)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -454,9 +461,12 @@ def health() -> dict[str, object]:
     except Exception:
         qdrant_ok = False
 
+    llm_ok = llm_client.health()
+
     return {
-        "status": "ok" if qdrant_ok else "degraded",
+        "status": "ok" if qdrant_ok and llm_ok else "degraded",
         "qdrant": qdrant_ok,
+        "llm": llm_ok,
         "collection": settings.collection_name,
         "llm_base_url": settings.llm_base_url,
         "llm_model": settings.llm_model,

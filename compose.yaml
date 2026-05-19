@@ -1,0 +1,95 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    expose:
+      - "6333"
+      - "6334"
+
+  vllm:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:latest}
+    restart: unless-stopped
+    ipc: host
+    gpus: all
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
+      HTTP_PROXY: ${DOCKER_HTTP_PROXY:-}
+      HTTPS_PROXY: ${DOCKER_HTTPS_PROXY:-}
+      NO_PROXY: ${DOCKER_NO_PROXY:-qdrant,vllm,api,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      http_proxy: ${DOCKER_HTTP_PROXY:-}
+      https_proxy: ${DOCKER_HTTPS_PROXY:-}
+      no_proxy: ${DOCKER_NO_PROXY:-qdrant,vllm,api,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      VLLM_USE_FLASHINFER_SAMPLER: ${VLLM_USE_FLASHINFER_SAMPLER:-0}
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - ./models:/models:ro
+    command:
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --api-key
+      - ${LLM_API_KEY:-token}
+      - --served-model-name
+      - ${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      - --dtype
+      - ${VLLM_DTYPE:-auto}
+      - --max-model-len
+      - ${VLLM_MAX_MODEL_LEN:-8192}
+      - --gpu-memory-utilization
+      - ${VLLM_GPU_MEMORY_UTILIZATION:-0.90}
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+      - vllm
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      API_PORT: "8080"
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-tech_docs}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      CHUNK_SIZE: ${CHUNK_SIZE:-800}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-120}
+      RETRIEVE_TOP_K: ${RETRIEVE_TOP_K:-4}
+      LLM_BASE_URL: http://vllm:8000/v1
+      LLM_API_KEY: ${LLM_API_KEY:-token}
+      LLM_MODEL: ${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.2}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-512}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
+      INGEST_ON_STARTUP: ${INGEST_ON_STARTUP:-1}
+      RECREATE_COLLECTION: ${RECREATE_COLLECTION:-1}
+      WAIT_FOR_LLM: ${WAIT_FOR_LLM:-1}
+      SERVICE_TIMEOUT_SECONDS: ${SERVICE_TIMEOUT_SECONDS:-1800}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
+      HTTP_PROXY: ${DOCKER_HTTP_PROXY:-}
+      HTTPS_PROXY: ${DOCKER_HTTPS_PROXY:-}
+      NO_PROXY: ${DOCKER_NO_PROXY:-qdrant,vllm,api,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      http_proxy: ${DOCKER_HTTP_PROXY:-}
+      https_proxy: ${DOCKER_HTTPS_PROXY:-}
+      no_proxy: ${DOCKER_NO_PROXY:-qdrant,vllm,api,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+    volumes:
+      - ./data/docs:/app/data/docs:ro
+      - huggingface_cache:/root/.cache/huggingface
+      - ./models:/models:ro
+
+volumes:
+  qdrant_storage:
+  huggingface_cache:

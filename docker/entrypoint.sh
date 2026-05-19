@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export QDRANT_URL="${QDRANT_URL:-http://qdrant:6333}"
+export LLM_BASE_URL="${LLM_BASE_URL:-http://vllm:8000/v1}"
+export LLM_API_KEY="${LLM_API_KEY:-token}"
+
+API_HOST="${API_HOST:-0.0.0.0}"
+API_PORT="${API_PORT:-8080}"
+INGEST_ON_STARTUP="${INGEST_ON_STARTUP:-1}"
+RECREATE_COLLECTION="${RECREATE_COLLECTION:-0}"
+WAIT_FOR_LLM="${WAIT_FOR_LLM:-1}"
+SERVICE_TIMEOUT_SECONDS="${SERVICE_TIMEOUT_SECONDS:-1800}"
+
+is_true() {
+  case "${1,,}" in
+    1|true|yes|y|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+wait_http() {
+  local name="$1"
+  local url="$2"
+  local timeout_seconds="$3"
+  local auth_token_env="${4:-}"
+
+  python - "$name" "$url" "$timeout_seconds" "$auth_token_env" <<'PY'
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+
+name, url, timeout_seconds, auth_token_env = sys.argv[1:5]
+deadline = time.monotonic() + float(timeout_seconds)
+last_error = None
+
+while True:
+    headers = {}
+    if auth_token_env:
+        token = os.getenv(auth_token_env)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        request = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(request, timeout=5) as response:
+            if 200 <= response.status < 300:
+                print(f"{name} is ready: {url}", flush=True)
+                sys.exit(0)
+            last_error = f"HTTP {response.status}"
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
+        last_error = exc
+
+    if time.monotonic() >= deadline:
+        print(
+            f"Timed out waiting for {name} at {url}. Last error: {last_error}",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+
+    print(f"Waiting for {name} at {url}...", flush=True)
+    time.sleep(5)
+PY
+}
+
+QDRANT_READY_URL="${QDRANT_READY_URL:-${QDRANT_URL%/}/collections}"
+LLM_READY_URL="${LLM_READY_URL:-${LLM_BASE_URL%/}/models}"
+
+wait_http "Qdrant" "$QDRANT_READY_URL" "$SERVICE_TIMEOUT_SECONDS"
+
+if is_true "$INGEST_ON_STARTUP"; then
+  ingest_args=()
+  if is_true "$RECREATE_COLLECTION"; then
+    ingest_args+=(--recreate)
+  fi
+
+  python scripts/ingest_docs.py "${ingest_args[@]}"
+else
+  echo "Skipping document ingest because INGEST_ON_STARTUP=${INGEST_ON_STARTUP}"
+fi
+
+if is_true "$WAIT_FOR_LLM"; then
+  wait_http "vLLM" "$LLM_READY_URL" "$SERVICE_TIMEOUT_SECONDS" LLM_API_KEY
+else
+  echo "Starting API before vLLM readiness because WAIT_FOR_LLM=${WAIT_FOR_LLM}"
+fi
+
+exec uvicorn app.main:app --host "$API_HOST" --port "$API_PORT"
