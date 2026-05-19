@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
-cd ~/CAREER/local_rag_llm
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+cd "${PROJECT_ROOT}"
+mkdir -p qdrant_storage
 
 docker run --rm \
   --name local-rag-qdrant \
