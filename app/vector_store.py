@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Iterable
 from uuid import NAMESPACE_URL, uuid5
 
@@ -20,6 +21,10 @@ class SearchResult:
     score: float
 
 
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+
+
 def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than 0")
@@ -28,17 +33,182 @@ def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     if overlap >= chunk_size:
         raise ValueError("overlap must be smaller than chunk_size")
 
-    chunks: list[str] = []
-    start = 0
+    sections = _markdown_sections(text)
+    if not sections:
+        return []
 
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        start += chunk_size - overlap
+    chunks: list[str] = []
+    current_parts: list[str] = []
+
+    for section in sections:
+        for part in _split_oversized_section(section, chunk_size):
+            if not current_parts:
+                current_parts.append(part)
+                continue
+
+            candidate = _join_chunk_parts([*current_parts, part])
+            if len(candidate) <= chunk_size:
+                current_parts.append(part)
+                continue
+
+            chunks.append(_join_chunk_parts(current_parts))
+            current_parts = _overlap_parts(current_parts, overlap)
+
+            if (
+                current_parts
+                and len(_join_chunk_parts([*current_parts, part])) > chunk_size
+            ):
+                current_parts = []
+
+            current_parts.append(part)
+
+    if current_parts:
+        chunks.append(_join_chunk_parts(current_parts))
 
     return chunks
+
+
+def _markdown_sections(text: str) -> list[str]:
+    heading_stack: list[tuple[int, str]] = []
+    body_lines: list[str] = []
+    sections: list[str] = []
+    in_fence = False
+
+    def flush_body() -> None:
+        body = "\n".join(body_lines).strip()
+        body_lines.clear()
+        if not body:
+            return
+
+        heading_context = "\n".join(heading for _, heading in heading_stack)
+        section = "\n\n".join(part for part in [heading_context, body] if part)
+        if section:
+            sections.append(section)
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+
+        if _FENCE_RE.match(line):
+            body_lines.append(line)
+            in_fence = not in_fence
+            continue
+
+        heading_match = _HEADING_RE.match(line) if not in_fence else None
+        if heading_match:
+            flush_body()
+            level = len(heading_match.group(1))
+            while heading_stack and heading_stack[-1][0] >= level:
+                heading_stack.pop()
+            heading_stack.append((level, line.strip()))
+            continue
+
+        body_lines.append(line)
+
+    flush_body()
+    return sections
+
+
+def _split_oversized_section(section: str, chunk_size: int) -> list[str]:
+    section = section.strip()
+    if len(section) <= chunk_size:
+        return [section]
+
+    heading_prefix, body = _split_heading_prefix(section)
+    if not body:
+        return _word_boundary_chunks(section, chunk_size)
+
+    body_limit = (
+        chunk_size - len(heading_prefix) - 2
+        if heading_prefix
+        else chunk_size
+    )
+    body_limit = max(120, body_limit)
+    parts: list[str] = []
+
+    for body_part in _word_boundary_chunks(body, body_limit):
+        chunk = "\n\n".join(
+            part for part in [heading_prefix, body_part] if part
+        ).strip()
+        parts.append(chunk)
+
+    return parts
+
+
+def _split_heading_prefix(section: str) -> tuple[str, str]:
+    lines = section.splitlines()
+    prefix_lines: list[str] = []
+    body_start = 0
+    seen_heading = False
+
+    for idx, line in enumerate(lines):
+        if _HEADING_RE.match(line):
+            prefix_lines.append(line.strip())
+            seen_heading = True
+            body_start = idx + 1
+            continue
+
+        if seen_heading and not line.strip():
+            body_start = idx + 1
+            continue
+
+        break
+
+    prefix = "\n".join(prefix_lines).strip()
+    body = "\n".join(lines[body_start:]).strip()
+    return prefix, body
+
+
+def _word_boundary_chunks(text: str, max_chars: int) -> list[str]:
+    if len(text) <= max_chars:
+        return [text.strip()] if text.strip() else []
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for token in re.findall(r"\S+\s*", text):
+        if current and current_len + len(token) > max_chars:
+            chunks.append("".join(current).strip())
+            current = []
+            current_len = 0
+
+        while len(token) > max_chars:
+            if current:
+                chunks.append("".join(current).strip())
+                current = []
+                current_len = 0
+            chunks.append(token[:max_chars].strip())
+            token = token[max_chars:]
+
+        current.append(token)
+        current_len += len(token)
+
+    if current:
+        chunks.append("".join(current).strip())
+
+    return [chunk for chunk in chunks if chunk]
+
+
+def _join_chunk_parts(parts: list[str]) -> str:
+    return "\n\n".join(part.strip() for part in parts if part.strip()).strip()
+
+
+def _overlap_parts(parts: list[str], max_chars: int) -> list[str]:
+    if max_chars <= 0:
+        return []
+
+    overlap: list[str] = []
+    total_len = 0
+
+    for part in reversed(parts):
+        part_len = len(part)
+        separator_len = 2 if overlap else 0
+        if total_len + separator_len + part_len > max_chars:
+            break
+        overlap.insert(0, part)
+        total_len += separator_len + part_len
+
+    return overlap
 
 
 class VectorStore:

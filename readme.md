@@ -280,6 +280,12 @@ Smoke-test retrieval:
 python scripts/test_retrieve.py
 ```
 
+Smoke-test Markdown chunking:
+
+```bash
+python scripts/test_chunking.py
+```
+
 Smoke-test intent routing:
 
 ```bash
@@ -306,7 +312,12 @@ Pinot, Snowflake, BigQuery, MongoDB, Cassandra, ScyllaDB, Redis, Elasticsearch,
 Neo4j, TimescaleDB, InfluxDB, Qdrant, Milvus, Weaviate, pgvector, Chroma, FAISS,
 CockroachDB, YugabyteDB, TiDB, and a database selection guide.
 
-After adding or editing documents, rebuild the collection:
+Chunking is Markdown-aware: headings are preserved as context, sections are kept
+together where possible, and only oversized sections are split on word
+boundaries. This avoids fixed-width chunks that begin or end mid-word.
+
+After adding or editing documents, or after changing chunking logic, rebuild the
+collection:
 
 ```bash
 python scripts/ingest_docs.py --recreate
@@ -321,6 +332,7 @@ Run these checks from the repository root:
 ```bash
 git status --short --ignored
 python -m compileall app scripts
+python scripts/test_chunking.py
 python scripts/test_intent_router.py
 docker compose config
 ```
