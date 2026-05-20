@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.config import Settings, settings
+from app.intent_router import IntentRouter
 from app.llm_client import LocalLLMClient
 from app.vector_store import SearchResult, VectorStore
 
@@ -20,6 +21,9 @@ class RAGAnswer:
     contexts: list[SearchResult]
     conversation_summary: str
     compacted_history_messages: int
+    used_rag: bool
+    route: str
+    route_reason: str
 
 
 class RAGPipeline:
@@ -28,10 +32,16 @@ class RAGPipeline:
         config: Settings = settings,
         vector_store: VectorStore | None = None,
         llm_client: LocalLLMClient | None = None,
+        intent_router: IntentRouter | None = None,
     ) -> None:
         self.config = config
         self.vector_store = vector_store or VectorStore(config)
         self.llm_client = llm_client or LocalLLMClient(config)
+        self.intent_router = intent_router or IntentRouter(
+            config,
+            embedder=getattr(self.vector_store, "model", None),
+            llm_client=self.llm_client,
+        )
 
     def answer(
         self,
@@ -45,15 +55,30 @@ class RAGPipeline:
             clean_history,
             conversation_summary or "",
         )
-        search_query = self._build_search_query(question, recent_history)
-        contexts = self.vector_store.search(search_query, top_k=top_k)
-        messages = self._build_messages(question, contexts, recent_history, summary)
+        intent = self.intent_router.route(question, recent_history, summary)
+
+        if intent.use_rag:
+            search_query = self._build_search_query(question, recent_history)
+            contexts = self.vector_store.search(search_query, top_k=top_k)
+            messages = self._build_rag_messages(
+                question,
+                contexts,
+                recent_history,
+                summary,
+            )
+        else:
+            contexts = []
+            messages = self._build_direct_messages(question, recent_history, summary)
+
         answer = self.llm_client.chat(messages)
         return RAGAnswer(
             answer=answer,
             contexts=contexts,
             conversation_summary=summary,
             compacted_history_messages=compacted_count,
+            used_rag=intent.use_rag,
+            route=intent.route,
+            route_reason=intent.reason,
         )
 
     def _normalize_history(self, history: list[ChatMessage]) -> list[ChatMessage]:
@@ -168,7 +193,7 @@ class RAGPipeline:
         query = "\n".join([*recent_user_messages, question]).strip()
         return query[-1800:] if query else question
 
-    def _build_messages(
+    def _build_rag_messages(
         self,
         question: str,
         contexts: list[SearchResult],
@@ -204,6 +229,43 @@ class RAGPipeline:
         messages = [
             {"role": "system", "content": system_prompt},
         ]
+
+        if conversation_summary:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Compact conversation memory:\n"
+                        f"{conversation_summary}"
+                    ),
+                }
+            )
+
+        messages.extend(
+            {"role": message.role, "content": message.content}
+            for message in recent_history
+        )
+        messages.append({"role": "user", "content": user_prompt})
+        return messages
+
+    def _build_direct_messages(
+        self,
+        question: str,
+        recent_history: list[ChatMessage],
+        conversation_summary: str,
+    ) -> list[dict[str, str]]:
+        system_prompt = (
+            "You are a technical AI assistant. This request was routed to "
+            "direct chat, so no vector database retrieval was used. Answer from "
+            "the conversation context and your general knowledge, and do not "
+            "claim that local documents support the answer."
+        )
+        user_prompt = (
+            "Current question:\n"
+            f"{question}\n\n"
+            "Answer in the same language as the current question when possible."
+        )
+        messages = [{"role": "system", "content": system_prompt}]
 
         if conversation_summary:
             messages.append(

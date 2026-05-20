@@ -13,7 +13,8 @@ search engines, graph databases, and vector databases.
 
 - Docker Compose deployment for Qdrant, vLLM, document ingestion, and FastAPI.
 - Chat-style web UI at `/` with adjustable `top_k` retrieval.
-- Source references are shown for each answer.
+- Intent routing avoids vector search for off-topic or direct-chat questions.
+- Source references are shown when retrieval is used.
 - Conversation history is sent to the backend and older turns are compacted into
   a reusable summary.
 - Runtime configuration is environment-driven through `.env`.
@@ -27,8 +28,13 @@ Browser UI
    |
 FastAPI /rag
    |
-RAGPipeline
-   |-- SentenceTransformers -> Qdrant vector search
+IntentRouter
+   |-- keyword rules
+   |-- embedding similarity
+   |-- vLLM zero-shot fallback for ambiguous cases
+   |
+RAGPipeline or Direct Chat
+   |-- optional SentenceTransformers -> Qdrant vector search
    |-- vLLM OpenAI-compatible /v1/chat/completions
    |
 Answer + retrieved references + compacted conversation memory
@@ -38,12 +44,28 @@ Main modules:
 
 - `app/main.py`: FastAPI routes, health check, and static UI serving.
 - `app/static/index.html`: browser chat interface.
+- `app/intent_router.py`: keyword, embedding, and LLM fallback routing.
 - `app/rag.py`: retrieval, prompt construction, and history compaction.
 - `app/vector_store.py`: Markdown chunking, embeddings, Qdrant collection
   management, and search.
 - `app/llm_client.py`: local OpenAI-compatible LLM client.
 - `scripts/`: manual service, ingest, and retrieval smoke-test commands.
 - `data/docs/`: Markdown documents ingested into Qdrant.
+
+## Repository Contents
+
+This repository is intended to be pushed without local runtime state. The
+committed project should include:
+
+- Source code under `app/`, `scripts/`, and `docker/`.
+- Deployment files: `Dockerfile`, `compose.yaml`, `.env.example`, and
+  dependency files.
+- Markdown corpus files under `data/docs/`.
+- Contributor/project docs such as `readme.md` and `AGENTS.md`.
+
+The repository should not include `.env`, model weights, Hugging Face caches,
+Qdrant storage, logs, virtual environments, or local editor files. These are
+covered by `.gitignore`.
 
 ## Quick Start With Docker Compose
 
@@ -138,6 +160,12 @@ CHUNK_OVERLAP=120
 HISTORY_RECENT_TURNS=6
 HISTORY_MAX_MESSAGES=80
 CONVERSATION_SUMMARY_MAX_CHARS=2200
+
+INTENT_ROUTER_ENABLED=1
+INTENT_LLM_FALLBACK=1
+INTENT_EMBEDDING_DB_THRESHOLD=0.38
+INTENT_EMBEDDING_DIRECT_THRESHOLD=0.40
+INTENT_EMBEDDING_MARGIN=0.06
 ```
 
 The default vLLM settings are tuned for a local 7B model on a high-memory GPU.
@@ -214,6 +242,8 @@ Response fields:
 - `contexts`: retrieved chunks with `source`, `chunk_id`, and `score`.
 - `conversation_summary`: compact memory for future turns.
 - `compacted_history_messages`: number of old messages merged into memory.
+- `used_rag`: whether Qdrant retrieval was used for this answer.
+- `route` and `route_reason`: intent-router decision metadata.
 
 ## Manual Development
 
@@ -222,6 +252,13 @@ Set up Python dependencies:
 ```bash
 conda activate rag_llm
 pip install -r requirements.txt
+```
+
+For API-only development with Docker-managed vLLM/Qdrant, the smaller runtime
+dependency set is:
+
+```bash
+pip install -r requirements.api.txt
 ```
 
 Start local services manually:
@@ -241,6 +278,12 @@ Smoke-test retrieval:
 
 ```bash
 python scripts/test_retrieve.py
+```
+
+Smoke-test intent routing:
+
+```bash
+python scripts/test_intent_router.py
 ```
 
 Run FastAPI:
@@ -271,8 +314,25 @@ python scripts/ingest_docs.py --recreate
 
 or restart Compose with `RECREATE_COLLECTION=1`.
 
+## Before Pushing to GitHub
+
+Run these checks from the repository root:
+
+```bash
+git status --short --ignored
+python -m compileall app scripts
+python scripts/test_intent_router.py
+docker compose config
+```
+
+Expected ignored local paths may include `.env`, `.vscode/`, `qdrant_storage/`,
+`models/`, and `__pycache__/`. Do not add those files. New source files such as
+`app/intent_router.py`, `app/static/index.html`, data docs, and scripts should
+be tracked.
+
 ## Git Hygiene
 
 Do not commit `.env`, API keys, Hugging Face tokens, model weights, Qdrant
 storage, cache directories, virtual environments, or logs. Runtime state such as
-`qdrant_storage/`, `models/`, `.cache/`, and `.env` is intentionally ignored.
+`qdrant_storage/`, `models/`, `.cache/`, local database files, and `.env` is
+intentionally ignored.

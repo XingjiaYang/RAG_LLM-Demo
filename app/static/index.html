@@ -273,6 +273,24 @@
       font-weight: 700;
     }
 
+    .message-route {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      width: min(760px, 100%);
+      overflow-wrap: anywhere;
+    }
+
+    .route-pill {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      padding: 3px 8px;
+      font-weight: 800;
+    }
+
     .bubble {
       max-width: min(760px, 100%);
       border: 1px solid var(--line);
@@ -499,6 +517,10 @@
           <div class="meta-label">Max Output</div>
           <div id="maxTokens" class="meta-item">Unknown</div>
         </div>
+        <div>
+          <div class="meta-label">Last Route</div>
+          <div id="latestRoute" class="meta-item">None</div>
+        </div>
       </div>
     </aside>
 
@@ -533,6 +555,7 @@
     const modelNameEl = document.getElementById("modelName");
     const collectionNameEl = document.getElementById("collectionName");
     const maxTokensEl = document.getElementById("maxTokens");
+    const latestRouteEl = document.getElementById("latestRoute");
     const compactChipEl = document.getElementById("compactChip");
     const chatLogEl = document.getElementById("chatLog");
     const referenceListEl = document.getElementById("referenceList");
@@ -604,6 +627,10 @@
         wrapper.appendChild(role);
         wrapper.appendChild(bubble);
 
+        if (message.role === "assistant" && !message.loading && !message.error) {
+          wrapper.appendChild(renderRouteMeta(message));
+        }
+
         if (message.role === "assistant" && message.contexts?.length) {
           wrapper.appendChild(renderInlineReferences(message.contexts));
         }
@@ -612,6 +639,22 @@
       }
 
       chatLogEl.scrollTop = chatLogEl.scrollHeight;
+    }
+
+    function renderRouteMeta(message) {
+      const meta = document.createElement("div");
+      meta.className = "message-route";
+      const pill = document.createElement("span");
+      pill.className = "route-pill";
+      const mode = message.usedRag ? "RAG" : "Direct";
+      pill.textContent = `${mode} · ${message.route || "unknown"}`;
+      meta.appendChild(pill);
+
+      if (message.routeReason) {
+        meta.appendChild(document.createTextNode(` ${message.routeReason}`));
+      }
+
+      return meta;
     }
 
     function renderInlineReferences(contexts) {
@@ -631,9 +674,14 @@
       return container;
     }
 
-    function renderReferences(contexts) {
+    function renderReferences(contexts, usedRag = true) {
       referenceListEl.innerHTML = "";
-      referenceListEl.className = contexts.length ? "" : "refs-empty";
+      referenceListEl.className = contexts.length && usedRag ? "" : "refs-empty";
+
+      if (!usedRag) {
+        referenceListEl.textContent = "No retrieval used for this answer.";
+        return;
+      }
 
       if (!contexts.length) {
         referenceListEl.textContent = "No references yet.";
@@ -692,6 +740,9 @@
         role: "assistant",
         content: "Thinking...",
         contexts: [],
+        usedRag: false,
+        route: "",
+        routeReason: "",
         loading: true
       };
 
@@ -719,12 +770,17 @@
 
         assistantMessage.content = data.answer;
         assistantMessage.contexts = data.contexts || [];
+        assistantMessage.usedRag = Boolean(data.used_rag);
+        assistantMessage.route = data.route || "";
+        assistantMessage.routeReason = data.route_reason || "";
         assistantMessage.loading = false;
         state.conversationSummary =
           data.conversation_summary || state.conversationSummary;
         state.summarizedMessageCount += data.compacted_history_messages || 0;
         compactChipEl.hidden = !state.conversationSummary;
-        renderReferences(assistantMessage.contexts);
+        latestRouteEl.textContent =
+          `${assistantMessage.usedRag ? "RAG" : "Direct"} · ${assistantMessage.route || "unknown"}`;
+        renderReferences(assistantMessage.contexts, assistantMessage.usedRag);
       } catch (error) {
         assistantMessage.content = error.message;
         assistantMessage.loading = false;
@@ -754,6 +810,7 @@
       state.conversationSummary = "";
       state.summarizedMessageCount = 0;
       compactChipEl.hidden = true;
+      latestRouteEl.textContent = "None";
       renderMessages();
       renderReferences([]);
       promptEl.focus();

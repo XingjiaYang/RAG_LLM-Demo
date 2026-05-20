@@ -4,9 +4,11 @@ __pycache__/
 *$py.class
 *.egg-info/
 .pytest_cache/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 build/
@@ -16,6 +18,7 @@ dist/
 .env
 .env.*
 !.env.example
+.envrc
 .venv/
 venv/
 env/
@@ -23,6 +26,8 @@ env/
 # Logs
 *.log
 logs/
+nohup.out
+*.pid
 
 # Runtime data, caches, and local model artifacts
 qdrant_storage/
@@ -34,11 +39,23 @@ hf_cache/
 data/raw/
 data/cache/
 data/uploads/
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+*.tmp
+*.bak
+*.swp
+*.npy
+*.npz
+*.parquet
 *.safetensors
 *.bin
 *.gguf
 *.pt
 *.pth
+*.ckpt
 *.onnx
 
 # Local Docker Compose overrides
@@ -46,8 +63,12 @@ compose.override.yaml
 compose.override.yml
 docker-compose.override.yaml
 docker-compose.override.yml
+.docker/
 
 # Editors and OS files
 .DS_Store
 .vscode/
 .idea/
+
+# Notebooks
+.ipynb_checkpoints/

@@ -4,7 +4,7 @@
 
 This repository is a local RAG MVP built with FastAPI, Qdrant, SentenceTransformers, and vLLM.
 
-- `app/`: application code. `main.py` exposes the FastAPI app, `static/` contains the web UI, `rag.py` coordinates retrieval and generation, `vector_store.py` manages Qdrant, `llm_client.py` calls the OpenAI-compatible vLLM API, and `config.py` reads environment settings.
+- `app/`: application code. `main.py` exposes the FastAPI app, `static/` contains the web UI, `intent_router.py` decides whether retrieval is needed, `rag.py` coordinates retrieval and generation, `vector_store.py` manages Qdrant, `llm_client.py` calls the OpenAI-compatible vLLM API, and `config.py` reads environment settings.
 - `scripts/`: operational scripts for starting local services, ingesting Markdown, and testing retrieval.
 - `data/docs/`: source Markdown documents used for ingestion.
 - `docker/`, `Dockerfile`, `compose.yaml`: container entrypoint and Docker Compose deployment.
@@ -20,6 +20,7 @@ This repository is a local RAG MVP built with FastAPI, Qdrant, SentenceTransform
 - `conda activate rag_llm && pip install -r requirements.txt`: set up manual local development.
 - `python scripts/ingest_docs.py --recreate`: rebuild the Qdrant collection from `data/docs/*.md`.
 - `python scripts/test_retrieve.py`: smoke-test vector retrieval.
+- `python scripts/test_intent_router.py`: smoke-test routing for RAG vs direct-chat questions.
 - `uvicorn app.main:app --host 0.0.0.0 --port 8080`: run the API manually.
 - `python -m compileall app scripts`: quick syntax check before pushing.
 

@@ -68,6 +68,9 @@ class RAGResponse(BaseModel):
     contexts: list[ContextResponse]
     conversation_summary: str
     compacted_history_messages: int
+    used_rag: bool
+    route: str
+    route_reason: str
 
 
 vector_store = VectorStore(settings)
@@ -105,6 +108,7 @@ def health() -> dict[str, object]:
         "llm_model": settings.llm_model,
         "llm_max_tokens": settings.llm_max_tokens,
         "history_recent_turns": settings.history_recent_turns,
+        "intent_router": settings.intent_router_enabled,
     }
 
 
@@ -133,4 +137,7 @@ def rag(request: RAGRequest) -> RAGResponse:
         ],
         conversation_summary=result.conversation_summary,
         compacted_history_messages=result.compacted_history_messages,
+        used_rag=result.used_rag,
+        route=result.route,
+        route_reason=result.route_reason,
     )

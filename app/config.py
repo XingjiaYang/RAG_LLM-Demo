@@ -20,6 +20,13 @@ def _env_float(name: str, default: float) -> float:
     return float(value)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "y", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     docs_dir: Path = PROJECT_ROOT / "data" / "docs"
@@ -44,6 +51,18 @@ class Settings:
         "CONVERSATION_SUMMARY_MAX_CHARS",
         2200,
     )
+
+    intent_router_enabled: bool = _env_bool("INTENT_ROUTER_ENABLED", True)
+    intent_llm_fallback: bool = _env_bool("INTENT_LLM_FALLBACK", True)
+    intent_embedding_db_threshold: float = _env_float(
+        "INTENT_EMBEDDING_DB_THRESHOLD",
+        0.38,
+    )
+    intent_embedding_direct_threshold: float = _env_float(
+        "INTENT_EMBEDDING_DIRECT_THRESHOLD",
+        0.40,
+    )
+    intent_embedding_margin: float = _env_float("INTENT_EMBEDDING_MARGIN", 0.06)
 
 
 settings = Settings()
