@@ -4,7 +4,7 @@
 
 This repository is a local RAG MVP built with FastAPI, Qdrant, SentenceTransformers, and vLLM.
 
-- `app/`: application code. `main.py` exposes the FastAPI app and web UI, `rag.py` coordinates retrieval and generation, `vector_store.py` manages Qdrant, `llm_client.py` calls the OpenAI-compatible vLLM API, and `config.py` reads environment settings.
+- `app/`: application code. `main.py` exposes the FastAPI app, `static/` contains the web UI, `rag.py` coordinates retrieval and generation, `vector_store.py` manages Qdrant, `llm_client.py` calls the OpenAI-compatible vLLM API, and `config.py` reads environment settings.
 - `scripts/`: operational scripts for starting local services, ingesting Markdown, and testing retrieval.
 - `data/docs/`: source Markdown documents used for ingestion.
 - `docker/`, `Dockerfile`, `compose.yaml`: container entrypoint and Docker Compose deployment.

@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local RAG LLM</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f5f1;
+      --surface: #ffffff;
+      --surface-soft: #f9faf6;
+      --text: #172026;
+      --muted: #68737d;
+      --line: #d9dfd5;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --coral: #c2410c;
+      --amber: #b7791f;
+      --danger: #b42318;
+      --code: #eef2ec;
+      --shadow: 0 18px 40px rgba(24, 36, 30, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    button,
+    textarea,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 360px;
+      min-height: 100vh;
+    }
+
+    .sidebar,
+    .refs-panel {
+      background: var(--surface-soft);
+      border-color: var(--line);
+      padding: 20px;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+    }
+
+    .refs-panel {
+      border-left: 1px solid var(--line);
+      overflow-y: auto;
+    }
+
+    .brand {
+      margin-bottom: 22px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 23px;
+      line-height: 1.15;
+    }
+
+    .brand p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--amber);
+    }
+
+    .status.ok .status-dot {
+      background: var(--accent);
+    }
+
+    .status.bad .status-dot {
+      background: var(--danger);
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 16px;
+    }
+
+    label,
+    .meta-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 10px 11px;
+      outline: none;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+    }
+
+    .meta-stack {
+      display: grid;
+      gap: 8px;
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .meta-item {
+      overflow-wrap: anywhere;
+    }
+
+    .clear-button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 10px 12px;
+      font-weight: 700;
+    }
+
+    .clear-button:hover {
+      border-color: #c7d0c5;
+      background: #fbfcfa;
+    }
+
+    .chat-column {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      min-width: 0;
+      min-height: 100vh;
+      background: #fbfcf8;
+    }
+
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid var(--line);
+      padding: 18px 24px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(12px);
+    }
+
+    .chat-title {
+      min-width: 0;
+    }
+
+    .chat-title h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .chat-title span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .compact-chip {
+      border: 1px solid #d5c6aa;
+      border-radius: 999px;
+      background: #fff8ed;
+      color: #7c4a03;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .chat-log {
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .empty-state {
+      max-width: 680px;
+      margin: 10vh auto 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .empty-state h2 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .empty-state p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .message {
+      display: grid;
+      gap: 8px;
+      max-width: 860px;
+      margin: 0 auto 18px;
+    }
+
+    .message.user {
+      justify-items: end;
+    }
+
+    .message.assistant {
+      justify-items: start;
+    }
+
+    .role {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .bubble {
+      max-width: min(760px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 13px 15px;
+      white-space: pre-wrap;
+      line-height: 1.62;
+      overflow-wrap: anywhere;
+    }
+
+    .user .bubble {
+      border-color: #a8d5cb;
+      background: #eaf8f5;
+    }
+
+    .assistant .bubble {
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(24, 36, 30, 0.05);
+    }
+
+    .bubble.loading {
+      color: var(--muted);
+    }
+
+    .bubble.error {
+      border-color: #f3b4ad;
+      background: #fff2f0;
+      color: var(--danger);
+    }
+
+    .message-refs {
+      width: min(760px, 100%);
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      padding: 10px 12px;
+    }
+
+    summary {
+      cursor: pointer;
+      color: var(--accent-strong);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.86);
+      padding: 16px 24px 20px;
+    }
+
+    .composer-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      max-width: 920px;
+      margin: 0 auto;
+      align-items: end;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 58px;
+      max-height: 190px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 13px 14px;
+      line-height: 1.5;
+      outline: none;
+    }
+
+    .send-button {
+      min-width: 104px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      padding: 13px 18px;
+      font-weight: 800;
+    }
+
+    .send-button:hover {
+      background: var(--accent-strong);
+    }
+
+    .send-button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    .refs-panel h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    .refs-empty {
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .ref-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .ref-meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .ref-source {
+      overflow-wrap: anywhere;
+      font-weight: 700;
+    }
+
+    .ref-score {
+      color: var(--coral);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    code {
+      display: block;
+      border-radius: 6px;
+      background: var(--code);
+      color: #34413b;
+      padding: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 1100px) {
+      .app-shell {
+        grid-template-columns: 240px minmax(0, 1fr);
+      }
+
+      .refs-panel {
+        display: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .chat-column {
+        min-height: 70vh;
+      }
+
+      .chat-header {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 16px;
+      }
+
+      .chat-log {
+        padding: 16px;
+      }
+
+      .composer {
+        padding: 14px 16px 16px;
+      }
+
+      .composer-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .send-button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>Local RAG LLM</h1>
+        <p id="modelName">Loading model metadata</p>
+      </div>
+
+      <div id="status" class="status">
+        <span id="statusText">Checking</span>
+        <span class="status-dot"></span>
+      </div>
+
+      <div class="field">
+        <label for="topK">Top K</label>
+        <input id="topK" type="number" min="1" max="20" value="4">
+      </div>
+
+      <button id="clearButton" class="clear-button" type="button">Clear Chat</button>
+
+      <div class="meta-stack">
+        <div>
+          <div class="meta-label">Collection</div>
+          <div id="collectionName" class="meta-item">Unknown</div>
+        </div>
+        <div>
+          <div class="meta-label">Max Output</div>
+          <div id="maxTokens" class="meta-item">Unknown</div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="chat-column">
+      <header class="chat-header">
+        <div class="chat-title">
+          <h2>Conversation</h2>
+          <span id="subtitle">Retrieval augmented chat over local Markdown docs</span>
+        </div>
+        <div id="compactChip" class="compact-chip" hidden>Memory compacted</div>
+      </header>
+
+      <div id="chatLog" class="chat-log"></div>
+
+      <form id="composer" class="composer">
+        <div class="composer-inner">
+          <textarea id="prompt" rows="2" placeholder="Ask a question about the indexed database notes"></textarea>
+          <button id="sendButton" class="send-button" type="submit">Send</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="refs-panel">
+      <h2>References</h2>
+      <div id="referenceList" class="refs-empty">No references yet.</div>
+    </aside>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const statusTextEl = document.getElementById("statusText");
+    const modelNameEl = document.getElementById("modelName");
+    const collectionNameEl = document.getElementById("collectionName");
+    const maxTokensEl = document.getElementById("maxTokens");
+    const compactChipEl = document.getElementById("compactChip");
+    const chatLogEl = document.getElementById("chatLog");
+    const referenceListEl = document.getElementById("referenceList");
+    const composerEl = document.getElementById("composer");
+    const promptEl = document.getElementById("prompt");
+    const topKEl = document.getElementById("topK");
+    const sendButton = document.getElementById("sendButton");
+    const clearButton = document.getElementById("clearButton");
+
+    const state = {
+      messages: [],
+      conversationSummary: "",
+      summarizedMessageCount: 0,
+      busy: false
+    };
+
+    function setStatus(text, className) {
+      statusTextEl.textContent = text;
+      statusEl.className = `status ${className || ""}`.trim();
+    }
+
+    async function checkHealth() {
+      try {
+        const response = await fetch("/health");
+        const data = await response.json();
+        const ready = Boolean(data.qdrant && data.llm);
+        setStatus(ready ? "Ready" : "Degraded", ready ? "ok" : "bad");
+        modelNameEl.textContent = data.llm_model || "Unknown model";
+        collectionNameEl.textContent = data.collection || "Unknown";
+        maxTokensEl.textContent = data.llm_max_tokens
+          ? `${data.llm_max_tokens} tokens`
+          : "Unknown";
+      } catch {
+        setStatus("Offline", "bad");
+      }
+    }
+
+    function renderMessages() {
+      chatLogEl.innerHTML = "";
+
+      if (state.messages.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        const title = document.createElement("h2");
+        title.textContent = "Ask against your local knowledge base";
+        const text = document.createElement("p");
+        text.textContent =
+          "The chat keeps recent turns, compacts older context, and retrieves Markdown references for each answer.";
+        empty.appendChild(title);
+        empty.appendChild(text);
+        chatLogEl.appendChild(empty);
+        return;
+      }
+
+      for (const message of state.messages) {
+        const wrapper = document.createElement("article");
+        wrapper.className = `message ${message.role}`;
+
+        const role = document.createElement("div");
+        role.className = "role";
+        role.textContent = message.role === "user" ? "You" : "Assistant";
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        if (message.loading) bubble.classList.add("loading");
+        if (message.error) bubble.classList.add("error");
+        bubble.textContent = message.content;
+
+        wrapper.appendChild(role);
+        wrapper.appendChild(bubble);
+
+        if (message.role === "assistant" && message.contexts?.length) {
+          wrapper.appendChild(renderInlineReferences(message.contexts));
+        }
+
+        chatLogEl.appendChild(wrapper);
+      }
+
+      chatLogEl.scrollTop = chatLogEl.scrollHeight;
+    }
+
+    function renderInlineReferences(contexts) {
+      const container = document.createElement("div");
+      container.className = "message-refs";
+      const details = document.createElement("details");
+      details.open = true;
+      const summary = document.createElement("summary");
+      summary.textContent = `References (${contexts.length})`;
+      details.appendChild(summary);
+
+      for (const item of contexts) {
+        details.appendChild(renderReferenceCard(item, 420));
+      }
+
+      container.appendChild(details);
+      return container;
+    }
+
+    function renderReferences(contexts) {
+      referenceListEl.innerHTML = "";
+      referenceListEl.className = contexts.length ? "" : "refs-empty";
+
+      if (!contexts.length) {
+        referenceListEl.textContent = "No references yet.";
+        return;
+      }
+
+      for (const item of contexts) {
+        referenceListEl.appendChild(renderReferenceCard(item, 760));
+      }
+    }
+
+    function renderReferenceCard(item, maxLength) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "ref-card";
+
+      const meta = document.createElement("div");
+      meta.className = "ref-meta";
+
+      const source = document.createElement("div");
+      source.className = "ref-source";
+      source.textContent = `${item.source} · chunk ${item.chunk_id}`;
+
+      const score = document.createElement("div");
+      score.className = "ref-score";
+      score.textContent = Number(item.score).toFixed(4);
+
+      const text = document.createElement("code");
+      const body = item.text || "";
+      text.textContent =
+        body.length > maxLength ? `${body.slice(0, maxLength)}...` : body;
+
+      meta.appendChild(source);
+      meta.appendChild(score);
+      wrapper.appendChild(meta);
+      wrapper.appendChild(text);
+      return wrapper;
+    }
+
+    function setBusy(isBusy) {
+      state.busy = isBusy;
+      sendButton.disabled = isBusy;
+      sendButton.textContent = isBusy ? "Thinking" : "Send";
+    }
+
+    async function ask(question) {
+      const historyForRequest = state.messages
+        .slice(state.summarizedMessageCount)
+        .filter((message) => !message.loading && !message.error)
+        .map((message) => ({
+          role: message.role,
+          content: message.content
+        }));
+
+      const userMessage = {role: "user", content: question};
+      const assistantMessage = {
+        role: "assistant",
+        content: "Thinking...",
+        contexts: [],
+        loading: true
+      };
+
+      state.messages.push(userMessage, assistantMessage);
+      renderMessages();
+      renderReferences([]);
+      setBusy(true);
+
+      try {
+        const response = await fetch("/rag", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            question,
+            top_k: Number(topKEl.value || 4),
+            history: historyForRequest,
+            conversation_summary: state.conversationSummary
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Request failed");
+        }
+
+        assistantMessage.content = data.answer;
+        assistantMessage.contexts = data.contexts || [];
+        assistantMessage.loading = false;
+        state.conversationSummary =
+          data.conversation_summary || state.conversationSummary;
+        state.summarizedMessageCount += data.compacted_history_messages || 0;
+        compactChipEl.hidden = !state.conversationSummary;
+        renderReferences(assistantMessage.contexts);
+      } catch (error) {
+        assistantMessage.content = error.message;
+        assistantMessage.loading = false;
+        assistantMessage.error = true;
+      } finally {
+        setBusy(false);
+        renderMessages();
+      }
+    }
+
+    composerEl.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const question = promptEl.value.trim();
+      if (!question || state.busy) return;
+      promptEl.value = "";
+      ask(question);
+    });
+
+    promptEl.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        composerEl.requestSubmit();
+      }
+    });
+
+    clearButton.addEventListener("click", () => {
+      state.messages = [];
+      state.conversationSummary = "";
+      state.summarizedMessageCount = 0;
+      compactChipEl.hidden = true;
+      renderMessages();
+      renderReferences([]);
+      promptEl.focus();
+    });
+
+    renderMessages();
+    checkHealth();
+  </script>
+</body>
+</html>

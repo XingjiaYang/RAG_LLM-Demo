@@ -13,6 +13,7 @@ class LocalLLMClient:
         self,
         messages: list[dict[str, str]],
         temperature: float | None = None,
+        top_p: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
         url = f"{self.config.llm_base_url.rstrip('/')}/chat/completions"
@@ -26,6 +27,7 @@ class LocalLLMClient:
             "temperature": self.config.llm_temperature
             if temperature is None
             else temperature,
+            "top_p": self.config.llm_top_p if top_p is None else top_p,
             "max_tokens": self.config.llm_max_tokens
             if max_tokens is None
             else max_tokens,

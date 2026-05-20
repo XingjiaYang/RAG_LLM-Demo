@@ -1,27 +1,59 @@
 # Local RAG LLM
 
-Local RAG MVP with Qdrant, SentenceTransformers, vLLM, and FastAPI.
+A self-hosted Retrieval-Augmented Generation application for querying a local
+Markdown knowledge base. The project runs Qdrant for vector search, vLLM for an
+OpenAI-compatible local LLM endpoint, SentenceTransformers for embeddings, and
+FastAPI for both the API and the browser UI.
 
-## Components
+The current dataset focuses on database systems, including embedded databases,
+OLTP engines, OLAP engines, distributed SQL systems, time-series databases,
+search engines, graph databases, and vector databases.
 
-- vLLM serves `Qwen/Qwen2.5-7B-Instruct`
-- Qdrant stores document chunks
-- Markdown documents live in `data/docs/*.md`
-- FastAPI exposes `POST /rag`
-- Docker Compose can start Qdrant, vLLM, document ingest, and FastAPI with one
-  command
+## Highlights
 
-## Docker Deployment
+- Docker Compose deployment for Qdrant, vLLM, document ingestion, and FastAPI.
+- Chat-style web UI at `/` with adjustable `top_k` retrieval.
+- Source references are shown for each answer.
+- Conversation history is sent to the backend and older turns are compacted into
+  a reusable summary.
+- Runtime configuration is environment-driven through `.env`.
+- Supports Hugging Face cache volumes, local model directories, mirrors, and
+  host-side HTTP proxy settings for restricted networks.
 
-This is the recommended path when you do not want to start Qdrant, vLLM,
-ingest, and FastAPI manually.
+## Architecture
+
+```text
+Browser UI
+   |
+FastAPI /rag
+   |
+RAGPipeline
+   |-- SentenceTransformers -> Qdrant vector search
+   |-- vLLM OpenAI-compatible /v1/chat/completions
+   |
+Answer + retrieved references + compacted conversation memory
+```
+
+Main modules:
+
+- `app/main.py`: FastAPI routes, health check, and static UI serving.
+- `app/static/index.html`: browser chat interface.
+- `app/rag.py`: retrieval, prompt construction, and history compaction.
+- `app/vector_store.py`: Markdown chunking, embeddings, Qdrant collection
+  management, and search.
+- `app/llm_client.py`: local OpenAI-compatible LLM client.
+- `scripts/`: manual service, ingest, and retrieval smoke-test commands.
+- `data/docs/`: Markdown documents ingested into Qdrant.
+
+## Quick Start With Docker Compose
 
 Prerequisites:
 
-- Docker with Compose v2
-- NVIDIA Container Toolkit if you run the default GPU vLLM service
+- Docker with Compose v2.
+- NVIDIA Container Toolkit for the default GPU-backed vLLM service.
+- Enough GPU memory for the selected local model.
 
-Create an optional local env file:
+Create local settings:
 
 ```bash
 cp .env.example .env
@@ -33,7 +65,7 @@ Start the full stack:
 docker compose up --build
 ```
 
-Open the frontend:
+Open the app:
 
 ```text
 http://localhost:8080
@@ -45,42 +77,85 @@ Use a different host port:
 APP_PORT=9000 docker compose up --build
 ```
 
-Then open:
+Then open `http://localhost:9000`.
 
-```text
-http://localhost:9000
-```
-
-Startup behavior:
-
-- `qdrant` persists vectors in the named Docker volume `qdrant_storage`
-- `vllm` serves the configured `LLM_MODEL`
-- `api` waits for Qdrant, ingests `data/docs/*.md`, waits for vLLM, then starts
-  FastAPI
-- `RECREATE_COLLECTION=1` rebuilds the Qdrant collection on startup so the
-  collection matches the current Markdown files
-- `WAIT_FOR_LLM=0` starts the frontend before vLLM finishes loading
-
-Common settings are in `.env.example`:
+Stop services:
 
 ```bash
-APP_PORT=8080
+docker compose down
+```
+
+Reset persisted Qdrant data and Hugging Face cache volumes:
+
+```bash
+docker compose down -v
+```
+
+## Startup Behavior
+
+`compose.yaml` starts three services:
+
+- `qdrant`: stores vectors in the `qdrant_storage` Docker volume.
+- `vllm`: serves `VLLM_MODEL` on `http://vllm:8000/v1`.
+- `api`: waits for Qdrant, optionally ingests `data/docs/*.md`, optionally waits
+  for vLLM readiness, then starts FastAPI on container port `8080`.
+
+Important startup flags:
+
+```bash
+INGEST_ON_STARTUP=1      # ingest docs before API starts
+RECREATE_COLLECTION=1    # rebuild the collection during startup
+WAIT_FOR_LLM=1           # wait for vLLM before serving API traffic
+APP_PORT=8080            # host port mapped to FastAPI/UI
+```
+
+For fast restarts after the image has already been built:
+
+```bash
+docker compose up -d
+```
+
+## Configuration
+
+Common settings from `.env.example`:
+
+```bash
 VLLM_MODEL=Qwen/Qwen2.5-7B-Instruct
 LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
 LLM_API_KEY=token
+VLLM_MAX_MODEL_LEN=32768
+VLLM_GPU_MEMORY_UTILIZATION=0.92
+LLM_TEMPERATURE=0.2
+LLM_TOP_P=0.9
+LLM_MAX_TOKENS=2048
+
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 QDRANT_COLLECTION=tech_docs
-INGEST_ON_STARTUP=1
-RECREATE_COLLECTION=1
-WAIT_FOR_LLM=1
+RETRIEVE_TOP_K=4
+CHUNK_SIZE=800
+CHUNK_OVERLAP=120
+
+HISTORY_RECENT_TURNS=6
+HISTORY_MAX_MESSAGES=80
+CONVERSATION_SUMMARY_MAX_CHARS=2200
 ```
 
-If the containers cannot reach Hugging Face, set a mirror or proxy in `.env`:
+The default vLLM settings are tuned for a local 7B model on a high-memory GPU.
+If vLLM reports out-of-memory errors, reduce `VLLM_MAX_MODEL_LEN`,
+`VLLM_GPU_MEMORY_UTILIZATION`, or `LLM_MAX_TOKENS`.
+
+## Restricted Network Setup
+
+Docker daemon proxy settings only help image pulls. Runtime containers need
+their own proxy or mirror settings in `.env`.
+
+For a Hugging Face mirror:
 
 ```bash
 HF_ENDPOINT=https://hf-mirror.com
 ```
 
-or:
+For host-side Mihomo, enable Allow LAN / bind to `0.0.0.0`, then set:
 
 ```bash
 DOCKER_HTTP_PROXY=http://host.docker.internal:7890
@@ -88,8 +163,12 @@ DOCKER_HTTPS_PROXY=http://host.docker.internal:7890
 DOCKER_NO_PROXY=qdrant,vllm,api,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 ```
 
-For fully offline deployment, copy local model directories under `models/` and
-point the services at those paths:
+Do not use `127.0.0.1` for the proxy host inside containers; it points to the
+container itself.
+
+## Offline Models
+
+You can mount local model directories through `./models:/models:ro`:
 
 ```text
 models/
@@ -97,7 +176,7 @@ models/
   qwen2.5-7b-instruct/
 ```
 
-Then set:
+Then configure:
 
 ```bash
 EMBEDDING_MODEL=/models/bge-small-en-v1.5
@@ -105,81 +184,7 @@ VLLM_MODEL=/models/qwen2.5-7b-instruct
 LLM_MODEL=qwen2.5-7b-instruct
 ```
 
-Stop the stack:
-
-```bash
-docker compose down
-```
-
-Remove persisted Qdrant/model cache volumes when you want a clean rebuild:
-
-```bash
-docker compose down -v
-```
-
-## Local Setup
-
-Use the existing conda environment:
-
-```bash
-conda activate rag_llm
-pip install -r requirements.txt
-```
-
-## Manual Local Services
-
-Start Qdrant:
-
-```bash
-bash scripts/start_qdrant.sh
-```
-
-Start vLLM in another terminal:
-
-```bash
-bash scripts/start_vllm.sh
-```
-
-The default API key is `token`. Override runtime settings with environment
-variables such as `LLM_API_KEY`, `LLM_MODEL`, `QDRANT_URL`, and
-`QDRANT_COLLECTION`.
-
-## Ingest Documents
-
-Put Markdown files in `data/docs/`, then run:
-
-```bash
-python scripts/ingest_docs.py
-```
-
-Rebuild the collection before ingesting:
-
-```bash
-python scripts/ingest_docs.py --recreate
-```
-
-## Test Retrieval
-
-```bash
-python scripts/test_retrieve.py
-```
-
-## Start API
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8080
-```
-
-Test RAG:
-
-```bash
-curl http://localhost:8080/rag \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "What is DuckDB good for?",
-    "top_k": 3
-  }'
-```
+## API Usage
 
 Health check:
 
@@ -187,8 +192,87 @@ Health check:
 curl http://localhost:8080/health
 ```
 
+RAG request:
+
+```bash
+curl http://localhost:8080/rag \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "When should I choose DuckDB over ClickHouse?",
+    "top_k": 4,
+    "history": [
+      {"role": "user", "content": "Compare embedded OLAP options."},
+      {"role": "assistant", "content": "DuckDB is embedded; ClickHouse is server-oriented."}
+    ],
+    "conversation_summary": ""
+  }'
+```
+
+Response fields:
+
+- `answer`: generated response.
+- `contexts`: retrieved chunks with `source`, `chunk_id`, and `score`.
+- `conversation_summary`: compact memory for future turns.
+- `compacted_history_messages`: number of old messages merged into memory.
+
+## Manual Development
+
+Set up Python dependencies:
+
+```bash
+conda activate rag_llm
+pip install -r requirements.txt
+```
+
+Start local services manually:
+
+```bash
+bash scripts/start_qdrant.sh
+bash scripts/start_vllm.sh
+```
+
+Ingest Markdown:
+
+```bash
+python scripts/ingest_docs.py --recreate
+```
+
+Smoke-test retrieval:
+
+```bash
+python scripts/test_retrieve.py
+```
+
+Run FastAPI:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+```
+
+Run a quick syntax check before pushing:
+
+```bash
+python -m compileall app scripts
+```
+
+## Document Corpus
+
+Markdown files in `data/docs/` are the RAG source of truth. Current files cover
+PostgreSQL, MySQL/InnoDB, SQLite, DuckDB, RocksDB, LMDB, ClickHouse, Druid,
+Pinot, Snowflake, BigQuery, MongoDB, Cassandra, ScyllaDB, Redis, Elasticsearch,
+Neo4j, TimescaleDB, InfluxDB, Qdrant, Milvus, Weaviate, pgvector, Chroma, FAISS,
+CockroachDB, YugabyteDB, TiDB, and a database selection guide.
+
+After adding or editing documents, rebuild the collection:
+
+```bash
+python scripts/ingest_docs.py --recreate
+```
+
+or restart Compose with `RECREATE_COLLECTION=1`.
+
 ## Git Hygiene
 
-Do not commit runtime storage, model caches, API keys, or logs. The repository
-ignores `qdrant_storage/`, cache folders, virtual environments, `.env`, and log
-files.
+Do not commit `.env`, API keys, Hugging Face tokens, model weights, Qdrant
+storage, cache directories, virtual environments, or logs. Runtime state such as
+`qdrant_storage/`, `models/`, `.cache/`, and `.env` is intentionally ignored.

@@ -34,8 +34,16 @@ class Settings:
     llm_api_key: str = os.getenv("LLM_API_KEY", "token")
     llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
     llm_temperature: float = _env_float("LLM_TEMPERATURE", 0.2)
-    llm_max_tokens: int = _env_int("LLM_MAX_TOKENS", 512)
-    llm_timeout_seconds: float = _env_float("LLM_TIMEOUT_SECONDS", 120.0)
+    llm_top_p: float = _env_float("LLM_TOP_P", 0.9)
+    llm_max_tokens: int = _env_int("LLM_MAX_TOKENS", 2048)
+    llm_timeout_seconds: float = _env_float("LLM_TIMEOUT_SECONDS", 300.0)
+
+    history_recent_turns: int = _env_int("HISTORY_RECENT_TURNS", 6)
+    history_max_messages: int = _env_int("HISTORY_MAX_MESSAGES", 80)
+    conversation_summary_max_chars: int = _env_int(
+        "CONVERSATION_SUMMARY_MAX_CHARS",
+        2200,
+    )
 
 
 settings = Settings()
