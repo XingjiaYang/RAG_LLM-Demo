@@ -9,6 +9,7 @@ import numpy as np
 
 from app.config import Settings, settings
 from app.llm_client import LocalLLMClient
+from app.prompt_budget import PromptBudget, TrimStrategy
 
 
 RouteName = Literal[
@@ -194,6 +195,7 @@ class IntentRouter:
         llm_client: LocalLLMClient | None = None,
     ) -> None:
         self.config = config
+        self.budget = PromptBudget.from_config(config)
         self.embedder = embedder
         self.llm_client = llm_client
         self._db_anchor_vectors: np.ndarray | None = None
@@ -335,8 +337,16 @@ class IntentRouter:
         recent_history: Sequence[HistoryMessage],
         conversation_summary: str,
     ) -> IntentDecision | None:
-        history_text = self._format_history(recent_history, max_chars=1800)
-        summary_text = conversation_summary.strip()[-1200:] or "None"
+        history_text = self._format_history(
+            recent_history,
+            max_chars=self.budget.intent_llm_history_max_chars,
+            strategy="tail",
+        )
+        summary_text = self.budget.trim_text(
+            conversation_summary,
+            self.budget.intent_llm_summary_max_chars,
+            strategy="middle",
+        ) or "None"
         prompt = (
             "Local corpus scope: database systems and database selection. It "
             "covers embedded databases, OLTP, OLAP, distributed SQL, search, "
@@ -364,7 +374,10 @@ class IntentRouter:
                 messages,
                 temperature=0.0,
                 top_p=1.0,
-                max_tokens=80,
+                max_tokens=min(
+                    self.budget.intent_llm_max_tokens,
+                    self.config.llm_max_tokens,
+                ),
             )
         except Exception:
             return None
@@ -403,30 +416,34 @@ class IntentRouter:
         recent_history: Sequence[HistoryMessage],
         conversation_summary: str,
     ) -> str:
-        history_text = self._format_history(recent_history, max_chars=2600)
+        history_text = self._format_history(
+            recent_history,
+            max_chars=self.budget.intent_embedding_history_max_chars,
+            strategy="tail",
+        )
+        summary_text = self.budget.trim_text(
+            conversation_summary,
+            self.budget.intent_embedding_summary_max_chars,
+            strategy="middle",
+        )
         parts = [
-            (
-                "Compact memory:\n"
-                f"{conversation_summary.strip()[-1000:]}"
-            )
-            if conversation_summary.strip()
-            else "",
+            f"Compact memory:\n{summary_text}" if summary_text else "",
             f"Recent conversation:\n{history_text}" if history_text else "",
             f"Current question:\n{question.strip()}",
         ]
-        return "\n\n".join(part for part in parts if part)[-3600:]
+        return self.budget.trim_text(
+            "\n\n".join(part for part in parts if part),
+            self.budget.intent_embedding_text_max_chars,
+            strategy="middle",
+        )
 
     def _format_history(
         self,
         history: Sequence[HistoryMessage],
         max_chars: int,
+        strategy: TrimStrategy = "middle",
     ) -> str:
-        text = "\n\n".join(
-            f"{message.role.upper()}: {message.content.strip()}"
-            for message in history
-            if message.content.strip()
-        )
-        return text[-max_chars:]
+        return self.budget.format_history(history, max_chars, strategy=strategy)
 
     def _parse_llm_decision(self, raw: str) -> tuple[bool, str] | None:
         match = re.search(r"\{.*\}", raw, flags=re.DOTALL)

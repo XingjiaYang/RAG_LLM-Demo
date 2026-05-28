@@ -159,10 +159,20 @@ CHUNK_OVERLAP=120
 
 HISTORY_RECENT_TURNS=6
 HISTORY_MAX_MESSAGES=80
+MESSAGE_MAX_CHARS=4000
 CONVERSATION_SUMMARY_MAX_CHARS=2200
+SUMMARY_HISTORY_MAX_CHARS=9000
+SUMMARY_MAX_TOKENS=700
+SEARCH_QUERY_MAX_CHARS=1800
 
 INTENT_ROUTER_ENABLED=1
 INTENT_LLM_FALLBACK=1
+INTENT_LLM_HISTORY_MAX_CHARS=1800
+INTENT_LLM_SUMMARY_MAX_CHARS=1200
+INTENT_LLM_MAX_TOKENS=80
+INTENT_EMBEDDING_HISTORY_MAX_CHARS=2600
+INTENT_EMBEDDING_SUMMARY_MAX_CHARS=1000
+INTENT_EMBEDDING_TEXT_MAX_CHARS=3600
 INTENT_EMBEDDING_DB_THRESHOLD=0.38
 INTENT_EMBEDDING_DIRECT_THRESHOLD=0.40
 INTENT_EMBEDDING_MARGIN=0.06
@@ -292,6 +302,12 @@ Smoke-test intent routing:
 python scripts/test_intent_router.py
 ```
 
+Smoke-test prompt budgeting and history trimming:
+
+```bash
+python scripts/test_prompt_budget.py
+```
+
 Run FastAPI:
 
 ```bash
@@ -334,6 +350,7 @@ git status --short --ignored
 python -m compileall app scripts
 python scripts/test_chunking.py
 python scripts/test_intent_router.py
+python scripts/test_prompt_budget.py
 docker compose config
 ```
 

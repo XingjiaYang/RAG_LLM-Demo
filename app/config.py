@@ -47,13 +47,38 @@ class Settings:
 
     history_recent_turns: int = _env_int("HISTORY_RECENT_TURNS", 6)
     history_max_messages: int = _env_int("HISTORY_MAX_MESSAGES", 80)
+    message_max_chars: int = _env_int("MESSAGE_MAX_CHARS", 4000)
     conversation_summary_max_chars: int = _env_int(
         "CONVERSATION_SUMMARY_MAX_CHARS",
         2200,
     )
+    summary_history_max_chars: int = _env_int("SUMMARY_HISTORY_MAX_CHARS", 9000)
+    summary_max_tokens: int = _env_int("SUMMARY_MAX_TOKENS", 700)
+    search_query_max_chars: int = _env_int("SEARCH_QUERY_MAX_CHARS", 1800)
 
     intent_router_enabled: bool = _env_bool("INTENT_ROUTER_ENABLED", True)
     intent_llm_fallback: bool = _env_bool("INTENT_LLM_FALLBACK", True)
+    intent_llm_history_max_chars: int = _env_int(
+        "INTENT_LLM_HISTORY_MAX_CHARS",
+        1800,
+    )
+    intent_llm_summary_max_chars: int = _env_int(
+        "INTENT_LLM_SUMMARY_MAX_CHARS",
+        1200,
+    )
+    intent_llm_max_tokens: int = _env_int("INTENT_LLM_MAX_TOKENS", 80)
+    intent_embedding_history_max_chars: int = _env_int(
+        "INTENT_EMBEDDING_HISTORY_MAX_CHARS",
+        2600,
+    )
+    intent_embedding_summary_max_chars: int = _env_int(
+        "INTENT_EMBEDDING_SUMMARY_MAX_CHARS",
+        1000,
+    )
+    intent_embedding_text_max_chars: int = _env_int(
+        "INTENT_EMBEDDING_TEXT_MAX_CHARS",
+        3600,
+    )
     intent_embedding_db_threshold: float = _env_float(
         "INTENT_EMBEDDING_DB_THRESHOLD",
         0.38,

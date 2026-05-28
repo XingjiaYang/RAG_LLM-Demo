@@ -6,6 +6,7 @@ from typing import Literal
 from app.config import Settings, settings
 from app.intent_router import IntentRouter
 from app.llm_client import LocalLLMClient
+from app.prompt_budget import PromptBudget, TrimStrategy
 from app.vector_store import SearchResult, VectorStore
 
 
@@ -35,6 +36,7 @@ class RAGPipeline:
         intent_router: IntentRouter | None = None,
     ) -> None:
         self.config = config
+        self.budget = PromptBudget.from_config(config)
         self.vector_store = vector_store or VectorStore(config)
         self.llm_client = llm_client or LocalLLMClient(config)
         self.intent_router = intent_router or IntentRouter(
@@ -94,7 +96,7 @@ class RAGPipeline:
             clean.append(
                 ChatMessage(
                     role=message.role,
-                    content=content[:4000],
+                    content=self.budget.trim_message(content),
                 )
             )
         return clean
@@ -121,10 +123,15 @@ class RAGPipeline:
         if not older_history:
             return self._trim_summary(conversation_summary)
 
-        history_text = self._format_history(older_history, max_chars=9000)
+        existing_summary = self._trim_summary(conversation_summary)
+        history_text = self._format_history(
+            older_history,
+            max_chars=self.budget.summary_history_max_chars,
+            strategy="middle",
+        )
         summary_prompt = (
             "Existing compact summary:\n"
-            f"{conversation_summary.strip() or 'None'}\n\n"
+            f"{existing_summary or 'None'}\n\n"
             "New conversation turns to merge:\n"
             f"{history_text}\n\n"
             "Write an updated compact memory for future answers. Keep durable "
@@ -147,12 +154,15 @@ class RAGPipeline:
                 messages,
                 temperature=0.0,
                 top_p=1.0,
-                max_tokens=min(700, self.config.llm_max_tokens),
+                max_tokens=min(
+                    self.budget.summary_max_tokens,
+                    self.config.llm_max_tokens,
+                ),
             )
         except Exception:
             fallback = "\n".join(
                 part
-                for part in [conversation_summary.strip(), history_text]
+                for part in [existing_summary, history_text]
                 if part
             )
             return self._trim_summary(fallback)
@@ -160,25 +170,15 @@ class RAGPipeline:
         return self._trim_summary(summary)
 
     def _trim_summary(self, summary: str) -> str:
-        max_chars = max(0, self.config.conversation_summary_max_chars)
-        summary = summary.strip()
-        if max_chars and len(summary) > max_chars:
-            return summary[-max_chars:].strip()
-        return summary
+        return self.budget.trim_summary(summary)
 
     def _format_history(
         self,
         history: list[ChatMessage],
         max_chars: int | None = None,
+        strategy: TrimStrategy = "middle",
     ) -> str:
-        lines = [
-            f"{message.role.upper()}: {message.content}"
-            for message in history
-        ]
-        text = "\n\n".join(lines)
-        if max_chars and len(text) > max_chars:
-            return text[-max_chars:]
-        return text
+        return self.budget.format_history(history, max_chars, strategy=strategy)
 
     def _build_search_query(
         self,
@@ -191,7 +191,13 @@ class RAGPipeline:
             if message.role == "user"
         ][-2:]
         query = "\n".join([*recent_user_messages, question]).strip()
-        return query[-1800:] if query else question
+        if not query:
+            return question
+        return self.budget.trim_text(
+            query,
+            self.budget.search_query_max_chars,
+            strategy="tail",
+        )
 
     def _build_rag_messages(
         self,
