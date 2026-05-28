@@ -52,6 +52,13 @@ class ContextResponse(BaseModel):
     source: str
     chunk_id: int
     score: float
+    content_type: str
+    h1: str
+    h2: str
+    h3: str
+    headings: list[str]
+    start_line: int
+    end_line: int
 
     @classmethod
     def from_search_result(cls, result: SearchResult) -> "ContextResponse":
@@ -60,6 +67,13 @@ class ContextResponse(BaseModel):
             source=result.source,
             chunk_id=result.chunk_id,
             score=result.score,
+            content_type=result.content_type,
+            h1=result.h1,
+            h2=result.h2,
+            h3=result.h3,
+            headings=list(result.headings),
+            start_line=result.start_line,
+            end_line=result.end_line,
         )
 
 

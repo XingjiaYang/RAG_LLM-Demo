@@ -209,7 +209,8 @@ class RAGPipeline:
         context_text = "\n\n".join(
             (
                 f"[{idx}] source={item.source} chunk={item.chunk_id} "
-                f"score={item.score:.4f}\n{item.text}"
+                f"score={item.score:.4f} type={item.content_type} "
+                f"headings={self._format_context_headings(item)}\n{item.text}"
             )
             for idx, item in enumerate(contexts, start=1)
         )
@@ -253,6 +254,12 @@ class RAGPipeline:
         )
         messages.append({"role": "user", "content": user_prompt})
         return messages
+
+    def _format_context_headings(self, item: SearchResult) -> str:
+        if item.headings:
+            return " > ".join(item.headings)
+        headings = [item.h1, item.h2, item.h3]
+        return " > ".join(heading for heading in headings if heading) or "None"
 
     def _build_direct_messages(
         self,

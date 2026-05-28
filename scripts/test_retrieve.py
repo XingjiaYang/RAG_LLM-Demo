@@ -26,7 +26,9 @@ def main() -> None:
         preview = result.text.replace("\n", " ")[:240]
         print(
             f"[{idx}] score={result.score:.4f} "
-            f"source={result.source} chunk={result.chunk_id}"
+            f"source={result.source} chunk={result.chunk_id} "
+            f"type={result.content_type} "
+            f"headings={' > '.join(result.headings) or 'None'}"
         )
         print(preview)
         print()

@@ -702,7 +702,11 @@
 
       const source = document.createElement("div");
       source.className = "ref-source";
-      source.textContent = `${item.source} · chunk ${item.chunk_id}`;
+      const headings = Array.isArray(item.headings) && item.headings.length
+        ? ` · ${item.headings.join(" > ")}`
+        : "";
+      source.textContent =
+        `${item.source} · chunk ${item.chunk_id} · ${item.content_type || "text"}${headings}`;
 
       const score = document.createElement("div");
       score.className = "ref-score";

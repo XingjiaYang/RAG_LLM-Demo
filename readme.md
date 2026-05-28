@@ -249,7 +249,8 @@ curl http://localhost:8080/rag \
 Response fields:
 
 - `answer`: generated response.
-- `contexts`: retrieved chunks with `source`, `chunk_id`, and `score`.
+- `contexts`: retrieved chunks with `source`, `chunk_id`, `score`,
+  `content_type`, `headings`, line bounds, and `h1`/`h2`/`h3` metadata.
 - `conversation_summary`: compact memory for future turns.
 - `compacted_history_messages`: number of old messages merged into memory.
 - `used_rag`: whether Qdrant retrieval was used for this answer.
@@ -328,9 +329,12 @@ Pinot, Snowflake, BigQuery, MongoDB, Cassandra, ScyllaDB, Redis, Elasticsearch,
 Neo4j, TimescaleDB, InfluxDB, Qdrant, Milvus, Weaviate, pgvector, Chroma, FAISS,
 CockroachDB, YugabyteDB, TiDB, and a database selection guide.
 
-Chunking is Markdown-aware: headings are preserved as context, sections are kept
-together where possible, and only oversized sections are split on word
-boundaries. This avoids fixed-width chunks that begin or end mid-word.
+Chunking is Markdown-aware and metadata-driven: Markdown blocks are parsed,
+headings are stored as `h1`/`h2`/`h3` payload metadata, and text, code, and
+tables are chunked separately. Heading context is included in embedding input
+but kept separate from stored chunk text to avoid duplicating titles in every
+chunk. Oversized text chunks use an effective chunk budget that leaves room for
+overlap, while fenced code chunks preserve complete fences.
 
 After adding or editing documents, or after changing chunking logic, rebuild the
 collection:
