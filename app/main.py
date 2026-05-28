@@ -37,14 +37,28 @@ INDEX_HTML_FALLBACK = """
 
 class ChatMessageRequest(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(..., min_length=1, max_length=8000)
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=settings.api_message_max_chars,
+    )
 
 
 class RAGRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=8000)
-    top_k: int | None = Field(default=None, ge=1, le=20)
-    history: list[ChatMessageRequest] = Field(default_factory=list, max_length=80)
-    conversation_summary: str | None = Field(default=None, max_length=5000)
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=settings.api_question_max_chars,
+    )
+    top_k: int | None = Field(default=None, ge=1, le=settings.api_top_k_max)
+    history: list[ChatMessageRequest] = Field(
+        default_factory=list,
+        max_length=settings.api_history_max_messages,
+    )
+    conversation_summary: str | None = Field(
+        default=None,
+        max_length=settings.api_summary_max_chars,
+    )
 
 
 class ContextResponse(BaseModel):
@@ -121,7 +135,9 @@ def health() -> dict[str, object]:
         "llm_base_url": settings.llm_base_url,
         "llm_model": settings.llm_model,
         "llm_max_tokens": settings.llm_max_tokens,
+        "retrieve_top_k": settings.retrieve_top_k,
         "history_recent_turns": settings.history_recent_turns,
+        "api_top_k_max": settings.api_top_k_max,
         "intent_router": settings.intent_router_enabled,
     }
 

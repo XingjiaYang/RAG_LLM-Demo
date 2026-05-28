@@ -151,6 +151,12 @@ LLM_TEMPERATURE=0.2
 LLM_TOP_P=0.9
 LLM_MAX_TOKENS=2048
 
+API_TOP_K_MAX=20
+API_MESSAGE_MAX_CHARS=8000
+API_QUESTION_MAX_CHARS=8000
+API_SUMMARY_MAX_CHARS=5000
+API_HISTORY_MAX_MESSAGES=80
+
 EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 QDRANT_COLLECTION=tech_docs
 RETRIEVE_TOP_K=4
@@ -265,6 +271,9 @@ conda activate rag_llm
 pip install -r requirements.txt
 ```
 
+`requirements.txt` lists direct development dependencies only; transitive pins
+are intentionally not committed as a `pip freeze` dump.
+
 For API-only development with Docker-managed vLLM/Qdrant, the smaller runtime
 dependency set is:
 
@@ -307,6 +316,12 @@ Smoke-test prompt budgeting and history trimming:
 
 ```bash
 python scripts/test_prompt_budget.py
+```
+
+Smoke-test configuration wiring:
+
+```bash
+python scripts/test_settings.py
 ```
 
 Run FastAPI:
@@ -355,6 +370,7 @@ python -m compileall app scripts
 python scripts/test_chunking.py
 python scripts/test_intent_router.py
 python scripts/test_prompt_budget.py
+python scripts/test_settings.py
 docker compose config
 ```
 

@@ -503,7 +503,7 @@
 
       <div class="field">
         <label for="topK">Top K</label>
-        <input id="topK" type="number" min="1" max="20" value="4">
+        <input id="topK" type="number" min="1">
       </div>
 
       <button id="clearButton" class="clear-button" type="button">Clear Chat</button>
@@ -588,6 +588,12 @@
         maxTokensEl.textContent = data.llm_max_tokens
           ? `${data.llm_max_tokens} tokens`
           : "Unknown";
+        if (data.api_top_k_max) {
+          topKEl.max = String(data.api_top_k_max);
+        }
+        if (data.retrieve_top_k) {
+          topKEl.placeholder = String(data.retrieve_top_k);
+        }
       } catch {
         setStatus("Offline", "bad");
       }
@@ -761,7 +767,7 @@
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
             question,
-            top_k: Number(topKEl.value || 4),
+            top_k: topKEl.value ? Number(topKEl.value) : null,
             history: historyForRequest,
             conversation_summary: state.conversationSummary
           })

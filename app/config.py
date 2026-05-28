@@ -36,6 +36,7 @@ class Settings:
     chunk_size: int = _env_int("CHUNK_SIZE", 800)
     chunk_overlap: int = _env_int("CHUNK_OVERLAP", 120)
     retrieve_top_k: int = _env_int("RETRIEVE_TOP_K", 4)
+    api_top_k_max: int = _env_int("API_TOP_K_MAX", 20)
 
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "token")
@@ -44,6 +45,11 @@ class Settings:
     llm_top_p: float = _env_float("LLM_TOP_P", 0.9)
     llm_max_tokens: int = _env_int("LLM_MAX_TOKENS", 2048)
     llm_timeout_seconds: float = _env_float("LLM_TIMEOUT_SECONDS", 300.0)
+
+    api_message_max_chars: int = _env_int("API_MESSAGE_MAX_CHARS", 8000)
+    api_question_max_chars: int = _env_int("API_QUESTION_MAX_CHARS", 8000)
+    api_summary_max_chars: int = _env_int("API_SUMMARY_MAX_CHARS", 5000)
+    api_history_max_messages: int = _env_int("API_HISTORY_MAX_MESSAGES", 80)
 
     history_recent_turns: int = _env_int("HISTORY_RECENT_TURNS", 6)
     history_max_messages: int = _env_int("HISTORY_MAX_MESSAGES", 80)
