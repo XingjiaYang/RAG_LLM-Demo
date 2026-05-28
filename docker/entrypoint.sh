@@ -2,14 +2,14 @@
 set -euo pipefail
 
 export QDRANT_URL="${QDRANT_URL:-http://qdrant:6333}"
-export LLM_BASE_URL="${LLM_BASE_URL:-http://vllm:8000/v1}"
-export LLM_API_KEY="${LLM_API_KEY:-token}"
+export LLM_BASE_URL="${LLM_BASE_URL:-https://api.openai.com/v1}"
+export LLM_API_KEY="${LLM_API_KEY:-}"
 
 API_HOST="${API_HOST:-0.0.0.0}"
 API_PORT="${API_PORT:-8080}"
 INGEST_ON_STARTUP="${INGEST_ON_STARTUP:-1}"
 RECREATE_COLLECTION="${RECREATE_COLLECTION:-0}"
-WAIT_FOR_LLM="${WAIT_FOR_LLM:-1}"
+WAIT_FOR_LLM="${WAIT_FOR_LLM:-0}"
 SERVICE_TIMEOUT_SECONDS="${SERVICE_TIMEOUT_SECONDS:-1800}"
 
 is_true() {
@@ -67,7 +67,8 @@ PY
 }
 
 QDRANT_READY_URL="${QDRANT_READY_URL:-${QDRANT_URL%/}/collections}"
-LLM_READY_URL="${LLM_READY_URL:-${LLM_BASE_URL%/}/models}"
+LLM_READY_PATH="${LLM_READY_PATH:-${LLM_HEALTH_PATH:-/models}}"
+LLM_READY_URL="${LLM_READY_URL:-${LLM_BASE_URL%/}${LLM_READY_PATH}}"
 
 wait_http "Qdrant" "$QDRANT_READY_URL" "$SERVICE_TIMEOUT_SECONDS"
 
@@ -83,9 +84,9 @@ else
 fi
 
 if is_true "$WAIT_FOR_LLM"; then
-  wait_http "vLLM" "$LLM_READY_URL" "$SERVICE_TIMEOUT_SECONDS" LLM_API_KEY
+  wait_http "LLM" "$LLM_READY_URL" "$SERVICE_TIMEOUT_SECONDS" LLM_API_KEY
 else
-  echo "Starting API before vLLM readiness because WAIT_FOR_LLM=${WAIT_FOR_LLM}"
+  echo "Starting API before LLM readiness because WAIT_FOR_LLM=${WAIT_FOR_LLM}"
 fi
 
 exec uvicorn app.main:app --host "$API_HOST" --port "$API_PORT"

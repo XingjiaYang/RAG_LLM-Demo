@@ -117,10 +117,35 @@ def assert_search_query_budget() -> None:
     print("Search query budget -> ok")
 
 
+def assert_compaction_threshold() -> None:
+    config = Settings(history_recent_turns=2, history_compact_after_turns=4)
+    pipeline = make_pipeline(config)
+    history = [
+        ChatMessage("user" if idx % 2 == 0 else "assistant", f"message {idx}")
+        for idx in range(8)
+    ]
+
+    summary, recent, compacted_count = pipeline._compact_history(history, "")
+    if summary or len(recent) != 8 or compacted_count != 0:
+        raise AssertionError("History should not compact before threshold.")
+
+    history.append(ChatMessage("user", "message 8"))
+    summary, recent, compacted_count = pipeline._compact_history(history, "")
+    if summary != "summary":
+        raise AssertionError("History should summarize after threshold.")
+    if len(recent) != 4:
+        raise AssertionError("Compaction should preserve configured recent turns.")
+    if compacted_count != 5:
+        raise AssertionError("Compacted count should include older messages.")
+
+    print("Compaction threshold -> ok")
+
+
 def main() -> None:
     assert_summary_middle_truncation()
     assert_history_normalization_budget()
     assert_search_query_budget()
+    assert_compaction_threshold()
 
 
 if __name__ == "__main__":

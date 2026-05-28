@@ -107,7 +107,8 @@ class RAGPipeline:
         conversation_summary: str,
     ) -> tuple[str, list[ChatMessage], int]:
         recent_limit = max(0, self.config.history_recent_turns * 2)
-        if not recent_limit or len(history) <= recent_limit:
+        compact_after = max(recent_limit, self.budget.history_compact_after_turns * 2)
+        if not recent_limit or len(history) <= compact_after:
             return self._trim_summary(conversation_summary), history, 0
 
         older_history = history[:-recent_limit]

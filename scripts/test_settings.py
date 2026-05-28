@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.config import Settings
+from app.llm_client import LocalLLMClient
 from app.prompt_budget import PromptBudget
 
 
@@ -34,9 +35,61 @@ def assert_api_limits() -> None:
     print("API validation settings -> ok")
 
 
+def assert_llm_settings() -> None:
+    config = Settings(
+        llm_provider="anthropic",
+        llm_base_url="https://api.anthropic.com/v1",
+        llm_api_key="test-key",
+        llm_model="claude-test",
+        llm_health_check_enabled=True,
+        llm_health_path="/models",
+        llm_anthropic_version="2023-06-01",
+    )
+
+    if config.llm_provider != "anthropic":
+        raise AssertionError("LLM provider should be configurable.")
+    if config.llm_base_url != "https://api.anthropic.com/v1":
+        raise AssertionError("LLM base URL should be configurable.")
+    if config.llm_model != "claude-test":
+        raise AssertionError("LLM model should be configurable.")
+    if not config.llm_health_check_enabled:
+        raise AssertionError("LLM health check flag should be configurable.")
+
+    print("LLM settings -> ok")
+
+
+def assert_llm_client_provider_helpers() -> None:
+    config = Settings(
+        llm_provider="Anthropic",
+        llm_api_key="test-key",
+        llm_anthropic_version="2023-06-01",
+        llm_health_check_enabled=False,
+    )
+    client = LocalLLMClient(config)
+    system, messages = client._to_anthropic_messages(
+        [
+            {"role": "system", "content": "System A"},
+            {"role": "system", "content": "System B"},
+            {"role": "user", "content": "Question 1"},
+            {"role": "user", "content": "Question 2"},
+            {"role": "assistant", "content": "Answer"},
+        ]
+    )
+
+    if system != "System A\n\nSystem B":
+        raise AssertionError("Anthropic system messages should be merged.")
+    if messages[0] != {"role": "user", "content": "Question 1\n\nQuestion 2"}:
+        raise AssertionError("Consecutive Anthropic user messages should be merged.")
+    if not client.health():
+        raise AssertionError("Disabled LLM health check should return healthy.")
+
+    print("LLM client provider helpers -> ok")
+
+
 def assert_prompt_budget_settings() -> None:
     config = Settings(
         message_max_chars=111,
+        history_compact_after_turns=22,
         conversation_summary_max_chars=222,
         summary_history_max_chars=333,
         summary_max_tokens=44,
@@ -52,6 +105,7 @@ def assert_prompt_budget_settings() -> None:
 
     expected = {
         "message_max_chars": 111,
+        "history_compact_after_turns": 22,
         "conversation_summary_max_chars": 222,
         "summary_history_max_chars": 333,
         "summary_max_tokens": 44,
@@ -72,6 +126,8 @@ def assert_prompt_budget_settings() -> None:
 
 def main() -> None:
     assert_api_limits()
+    assert_llm_settings()
+    assert_llm_client_provider_helpers()
     assert_prompt_budget_settings()
 
 

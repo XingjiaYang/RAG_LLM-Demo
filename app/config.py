@@ -38,52 +38,60 @@ class Settings:
     retrieve_top_k: int = _env_int("RETRIEVE_TOP_K", 4)
     api_top_k_max: int = _env_int("API_TOP_K_MAX", 20)
 
-    llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
-    llm_api_key: str = os.getenv("LLM_API_KEY", "token")
-    llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "openai_compatible")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+    llm_api_key: str = os.getenv("LLM_API_KEY", "")
+    llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
     llm_temperature: float = _env_float("LLM_TEMPERATURE", 0.2)
     llm_top_p: float = _env_float("LLM_TOP_P", 0.9)
-    llm_max_tokens: int = _env_int("LLM_MAX_TOKENS", 2048)
+    llm_max_tokens: int = _env_int("LLM_MAX_TOKENS", 4096)
     llm_timeout_seconds: float = _env_float("LLM_TIMEOUT_SECONDS", 300.0)
+    llm_health_check_enabled: bool = _env_bool("LLM_HEALTH_CHECK_ENABLED", False)
+    llm_health_path: str = os.getenv("LLM_HEALTH_PATH", "/models")
+    llm_anthropic_version: str = os.getenv(
+        "LLM_ANTHROPIC_VERSION",
+        "2023-06-01",
+    )
 
-    api_message_max_chars: int = _env_int("API_MESSAGE_MAX_CHARS", 8000)
-    api_question_max_chars: int = _env_int("API_QUESTION_MAX_CHARS", 8000)
-    api_summary_max_chars: int = _env_int("API_SUMMARY_MAX_CHARS", 5000)
-    api_history_max_messages: int = _env_int("API_HISTORY_MAX_MESSAGES", 80)
+    api_message_max_chars: int = _env_int("API_MESSAGE_MAX_CHARS", 16000)
+    api_question_max_chars: int = _env_int("API_QUESTION_MAX_CHARS", 16000)
+    api_summary_max_chars: int = _env_int("API_SUMMARY_MAX_CHARS", 12000)
+    api_history_max_messages: int = _env_int("API_HISTORY_MAX_MESSAGES", 120)
 
-    history_recent_turns: int = _env_int("HISTORY_RECENT_TURNS", 6)
-    history_max_messages: int = _env_int("HISTORY_MAX_MESSAGES", 80)
-    message_max_chars: int = _env_int("MESSAGE_MAX_CHARS", 4000)
+    history_recent_turns: int = _env_int("HISTORY_RECENT_TURNS", 16)
+    history_compact_after_turns: int = _env_int("HISTORY_COMPACT_AFTER_TURNS", 40)
+    history_max_messages: int = _env_int("HISTORY_MAX_MESSAGES", 120)
+    message_max_chars: int = _env_int("MESSAGE_MAX_CHARS", 8000)
     conversation_summary_max_chars: int = _env_int(
         "CONVERSATION_SUMMARY_MAX_CHARS",
-        2200,
+        6000,
     )
-    summary_history_max_chars: int = _env_int("SUMMARY_HISTORY_MAX_CHARS", 9000)
-    summary_max_tokens: int = _env_int("SUMMARY_MAX_TOKENS", 700)
-    search_query_max_chars: int = _env_int("SEARCH_QUERY_MAX_CHARS", 1800)
+    summary_history_max_chars: int = _env_int("SUMMARY_HISTORY_MAX_CHARS", 20000)
+    summary_max_tokens: int = _env_int("SUMMARY_MAX_TOKENS", 1200)
+    search_query_max_chars: int = _env_int("SEARCH_QUERY_MAX_CHARS", 3000)
 
     intent_router_enabled: bool = _env_bool("INTENT_ROUTER_ENABLED", True)
     intent_llm_fallback: bool = _env_bool("INTENT_LLM_FALLBACK", True)
     intent_llm_history_max_chars: int = _env_int(
         "INTENT_LLM_HISTORY_MAX_CHARS",
-        1800,
+        4000,
     )
     intent_llm_summary_max_chars: int = _env_int(
         "INTENT_LLM_SUMMARY_MAX_CHARS",
-        1200,
+        2500,
     )
-    intent_llm_max_tokens: int = _env_int("INTENT_LLM_MAX_TOKENS", 80)
+    intent_llm_max_tokens: int = _env_int("INTENT_LLM_MAX_TOKENS", 120)
     intent_embedding_history_max_chars: int = _env_int(
         "INTENT_EMBEDDING_HISTORY_MAX_CHARS",
-        2600,
+        5000,
     )
     intent_embedding_summary_max_chars: int = _env_int(
         "INTENT_EMBEDDING_SUMMARY_MAX_CHARS",
-        1000,
+        2500,
     )
     intent_embedding_text_max_chars: int = _env_int(
         "INTENT_EMBEDDING_TEXT_MAX_CHARS",
-        3600,
+        7000,
     )
     intent_embedding_db_threshold: float = _env_float(
         "INTENT_EMBEDDING_DB_THRESHOLD",

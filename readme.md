@@ -72,8 +72,9 @@ covered by `.gitignore`.
 Prerequisites:
 
 - Docker with Compose v2.
-- NVIDIA Container Toolkit for the default GPU-backed vLLM service.
-- Enough GPU memory for the selected local model.
+- A cloud LLM API key for the default cloud-backed setup.
+- Optional: NVIDIA Container Toolkit and enough GPU memory if you run the local
+  vLLM profile.
 
 Create local settings:
 
@@ -81,7 +82,9 @@ Create local settings:
 cp .env.example .env
 ```
 
-Start the full stack:
+Set `LLM_API_KEY` and, if needed, `LLM_MODEL` in `.env`.
+
+Start Qdrant and the API:
 
 ```bash
 docker compose up --build
@@ -115,19 +118,30 @@ docker compose down -v
 
 ## Startup Behavior
 
-`compose.yaml` starts three services:
+`compose.yaml` starts two services by default:
 
 - `qdrant`: stores vectors in the `qdrant_storage` Docker volume.
-- `vllm`: serves `VLLM_MODEL` on `http://vllm:8000/v1`.
-- `api`: waits for Qdrant, optionally ingests `data/docs/*.md`, optionally waits
-  for vLLM readiness, then starts FastAPI on container port `8080`.
+- `api`: waits for Qdrant, optionally ingests `data/docs/*.md`, and starts
+  FastAPI on container port `8080`.
+
+The `vllm` service is optional and only starts under the `local-llm` profile:
+
+```bash
+LLM_BASE_URL=http://vllm:8000/v1 \
+LLM_API_KEY=token \
+LLM_MODEL=Qwen/Qwen2.5-7B-Instruct \
+VLLM_SERVED_MODEL_NAME=Qwen/Qwen2.5-7B-Instruct \
+WAIT_FOR_LLM=1 \
+LLM_HEALTH_CHECK_ENABLED=1 \
+docker compose --profile local-llm up --build
+```
 
 Important startup flags:
 
 ```bash
 INGEST_ON_STARTUP=1      # ingest docs before API starts
 RECREATE_COLLECTION=1    # rebuild the collection during startup
-WAIT_FOR_LLM=1           # wait for vLLM before serving API traffic
+WAIT_FOR_LLM=0           # set to 1 when a local LLM service must be ready first
 APP_PORT=8080            # host port mapped to FastAPI/UI
 ```
 
@@ -142,20 +156,20 @@ docker compose up -d
 Common settings from `.env.example`:
 
 ```bash
-VLLM_MODEL=Qwen/Qwen2.5-7B-Instruct
-LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
-LLM_API_KEY=token
-VLLM_MAX_MODEL_LEN=32768
-VLLM_GPU_MEMORY_UTILIZATION=0.92
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=
 LLM_TEMPERATURE=0.2
 LLM_TOP_P=0.9
-LLM_MAX_TOKENS=2048
+LLM_MAX_TOKENS=4096
+LLM_HEALTH_CHECK_ENABLED=0
 
 API_TOP_K_MAX=20
-API_MESSAGE_MAX_CHARS=8000
-API_QUESTION_MAX_CHARS=8000
-API_SUMMARY_MAX_CHARS=5000
-API_HISTORY_MAX_MESSAGES=80
+API_MESSAGE_MAX_CHARS=16000
+API_QUESTION_MAX_CHARS=16000
+API_SUMMARY_MAX_CHARS=12000
+API_HISTORY_MAX_MESSAGES=120
 
 EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 QDRANT_COLLECTION=tech_docs
@@ -163,30 +177,32 @@ RETRIEVE_TOP_K=4
 CHUNK_SIZE=800
 CHUNK_OVERLAP=120
 
-HISTORY_RECENT_TURNS=6
-HISTORY_MAX_MESSAGES=80
-MESSAGE_MAX_CHARS=4000
-CONVERSATION_SUMMARY_MAX_CHARS=2200
-SUMMARY_HISTORY_MAX_CHARS=9000
-SUMMARY_MAX_TOKENS=700
-SEARCH_QUERY_MAX_CHARS=1800
+HISTORY_RECENT_TURNS=16
+HISTORY_COMPACT_AFTER_TURNS=40
+HISTORY_MAX_MESSAGES=120
+MESSAGE_MAX_CHARS=8000
+CONVERSATION_SUMMARY_MAX_CHARS=6000
+SUMMARY_HISTORY_MAX_CHARS=20000
+SUMMARY_MAX_TOKENS=1200
+SEARCH_QUERY_MAX_CHARS=3000
 
 INTENT_ROUTER_ENABLED=1
 INTENT_LLM_FALLBACK=1
-INTENT_LLM_HISTORY_MAX_CHARS=1800
-INTENT_LLM_SUMMARY_MAX_CHARS=1200
-INTENT_LLM_MAX_TOKENS=80
-INTENT_EMBEDDING_HISTORY_MAX_CHARS=2600
-INTENT_EMBEDDING_SUMMARY_MAX_CHARS=1000
-INTENT_EMBEDDING_TEXT_MAX_CHARS=3600
+INTENT_LLM_HISTORY_MAX_CHARS=4000
+INTENT_LLM_SUMMARY_MAX_CHARS=2500
+INTENT_LLM_MAX_TOKENS=120
+INTENT_EMBEDDING_HISTORY_MAX_CHARS=5000
+INTENT_EMBEDDING_SUMMARY_MAX_CHARS=2500
+INTENT_EMBEDDING_TEXT_MAX_CHARS=7000
 INTENT_EMBEDDING_DB_THRESHOLD=0.38
 INTENT_EMBEDDING_DIRECT_THRESHOLD=0.40
 INTENT_EMBEDDING_MARGIN=0.06
 ```
 
-The default vLLM settings are tuned for a local 7B model on a high-memory GPU.
-If vLLM reports out-of-memory errors, reduce `VLLM_MAX_MODEL_LEN`,
-`VLLM_GPU_MEMORY_UTILIZATION`, or `LLM_MAX_TOKENS`.
+`LLM_PROVIDER=openai_compatible` works with OpenAI-compatible cloud APIs and
+local vLLM. For Anthropic Claude, use `LLM_PROVIDER=anthropic` and
+`LLM_BASE_URL=https://api.anthropic.com/v1`. Embeddings remain local through
+SentenceTransformers.
 
 ## Restricted Network Setup
 
