@@ -15,7 +15,6 @@ RouteName = Literal[
     "disabled",
     "keyword_rag",
     "keyword_direct",
-    "keyword_followup_rag",
     "embedding_rag",
     "embedding_direct",
     "llm_rag",
@@ -155,61 +154,18 @@ class IntentRouter:
         "别查",
     )
 
-    DIRECT_TASK_KEYWORDS = (
-        "write a poem",
-        "poem",
-        "write a joke",
-        "make a joke",
-        "joke",
-        "write an email",
-        "email",
-        "cover letter",
-        "resume bullet",
-        "linkedin",
-        "translate",
-        "summarize my resume",
-        "写诗",
-        "诗",
-        "写一首",
-        "写一首诗",
-        "讲个笑话",
-        "笑话",
-        "写邮件",
-        "邮件",
-        "写简历",
-        "简历",
-        "翻译",
-    )
-
-    CASUAL_DIRECT_PATTERNS = (
-        r"^(hi|hello|hey|thanks|thank you|ok|okay)\b",
-        r"^(你好|您好|谢谢|感谢|好的|收到)[。！!.\s]*$",
-        r"(weather|天气|travel|旅行|recipe|菜谱|数学题|math problem)",
-    )
-
-    FOLLOWUP_MARKERS = (
-        "it",
-        "that",
-        "those",
-        "them",
-        "this",
-        "compare",
-        "difference",
-        "vs",
-        "versus",
-        "which one",
-        "when should",
-        "它",
-        "这个",
-        "那个",
-        "上述",
-        "这些",
-        "对比",
-        "相比",
-        "区别",
-        "优缺点",
-        "怎么选",
-        "哪个",
+    DIRECT_TASK_PATTERNS = (
+        (
+            r"\b(write|draft|compose|create|generate)\b.{0,80}"
+            r"\b(poem|joke|email|cover letter|resume|linkedin)\b"
+        ),
+        r"\b(tell|make)\b.{0,40}\bjoke\b",
+        r"\btranslate\b",
+        r"\bsummarize my resume\b",
+        r"(写|创作|生成).{0,40}(诗|邮件|简历)",
+        r"讲.{0,20}笑话",
+        r"翻译",
+        r"简历",
     )
 
     DB_ANCHORS = (
@@ -253,7 +209,7 @@ class IntentRouter:
             return IntentDecision(True, "disabled", "Intent router disabled.")
 
         question = question.strip()
-        keyword_decision = self._route_with_keywords(question, recent_history)
+        keyword_decision = self._route_with_keywords(question)
         if keyword_decision is not None:
             return keyword_decision
 
@@ -283,7 +239,6 @@ class IntentRouter:
     def _route_with_keywords(
         self,
         question: str,
-        recent_history: Sequence[HistoryMessage],
     ) -> IntentDecision | None:
         text = question.lower()
 
@@ -301,7 +256,7 @@ class IntentRouter:
                 "User explicitly asked to use local documents.",
             )
 
-        if self._contains_any(text, self.DIRECT_TASK_KEYWORDS):
+        if self._matches_direct_task(text):
             return IntentDecision(
                 False,
                 "keyword_direct",
@@ -314,22 +269,6 @@ class IntentRouter:
                 True,
                 "keyword_rag",
                 f"Matched database keyword: {matched_db_keyword}",
-            )
-
-        if any(re.search(pattern, text) for pattern in self.CASUAL_DIRECT_PATTERNS):
-            return IntentDecision(
-                False,
-                "keyword_direct",
-                "Question matched casual or off-topic wording.",
-            )
-
-        if self._looks_like_followup(text) and self._history_has_db_intent(
-            recent_history,
-        ):
-            return IntentDecision(
-                True,
-                "keyword_followup_rag",
-                "Short follow-up continues a database-related discussion.",
             )
 
         return None
@@ -442,7 +381,10 @@ class IntentRouter:
         )
 
     def _ensure_anchor_vectors(self) -> None:
-        if self._db_anchor_vectors is not None and self._direct_anchor_vectors is not None:
+        if (
+            self._db_anchor_vectors is not None
+            and self._direct_anchor_vectors is not None
+        ):
             return
         self._db_anchor_vectors = self._embed_many(self.DB_ANCHORS)
         self._direct_anchor_vectors = self._embed_many(self.DIRECT_ANCHORS)
@@ -461,17 +403,18 @@ class IntentRouter:
         recent_history: Sequence[HistoryMessage],
         conversation_summary: str,
     ) -> str:
-        recent_user_messages = [
-            message.content.strip()
-            for message in recent_history
-            if message.role == "user" and message.content.strip()
-        ][-2:]
+        history_text = self._format_history(recent_history, max_chars=2600)
         parts = [
-            conversation_summary.strip()[-1000:],
-            *recent_user_messages,
-            question.strip(),
+            (
+                "Compact memory:\n"
+                f"{conversation_summary.strip()[-1000:]}"
+            )
+            if conversation_summary.strip()
+            else "",
+            f"Recent conversation:\n{history_text}" if history_text else "",
+            f"Current question:\n{question.strip()}",
         ]
-        return "\n".join(part for part in parts if part)[-2400:]
+        return "\n\n".join(part for part in parts if part)[-3600:]
 
     def _format_history(
         self,
@@ -501,23 +444,22 @@ class IntentRouter:
 
         if "use_rag" not in data:
             return None
-        return bool(data["use_rag"]), str(data.get("reason", "")).strip()
 
-    def _history_has_db_intent(
-        self,
-        recent_history: Sequence[HistoryMessage],
-    ) -> bool:
-        recent_text = " ".join(
-            message.content.lower()
-            for message in recent_history[-6:]
-            if message.role == "user"
+        use_rag = data["use_rag"]
+        if isinstance(use_rag, bool):
+            parsed_use_rag = use_rag
+        elif isinstance(use_rag, str) and use_rag.lower() in {"true", "false"}:
+            parsed_use_rag = use_rag.lower() == "true"
+        else:
+            return None
+
+        return parsed_use_rag, str(data.get("reason", "")).strip()
+
+    def _matches_direct_task(self, text: str) -> bool:
+        return any(
+            re.search(pattern, text)
+            for pattern in self.DIRECT_TASK_PATTERNS
         )
-        return bool(self._first_match(recent_text, self.DB_KEYWORDS))
-
-    def _looks_like_followup(self, text: str) -> bool:
-        if len(text) > 120:
-            return False
-        return self._contains_any(text, self.FOLLOWUP_MARKERS)
 
     def _first_match(self, text: str, patterns: Sequence[str]) -> str | None:
         for pattern in patterns:
